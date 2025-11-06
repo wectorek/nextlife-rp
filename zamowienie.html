@@ -1,0 +1,606 @@
+<script type="module">
+
+  async function zapiszZamowienie(nazwa, cena) {
+    await addDoc(collection(baza, "zamowienia"), {
+      nazwa: nazwa,
+      cena: cena,
+      czas: new Date().toLocaleString()
+    })
+  }
+
+
+  async function pokazZamowienia() {
+    const wynik = await getDocs(collection(baza, "zamowienia"))
+    wynik.forEach(d => console.log(d.data()))
+  }
+
+</script>
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Bar Pod Dzikiem - zamówienia</title>
+<style>
+:root{--blue:#007bff;--muted:#f4f6f8}
+body{font-family:Arial,Helvetica,sans-serif;background:var(--muted);margin:0;padding:0}
+header{position:sticky;top:0;background:var(--blue);color:#fff;padding:12px;display:flex;justify-content:center;align-items:center;z-index:1000}
+header h1{margin:0;font-size:18px}
+nav{display:flex;justify-content:center;gap:8px;padding:10px;background:#333}
+nav button{background:#555;color:#fff;border:none;padding:9px 14px;border-radius:8px;cursor:pointer;font-weight:600}
+nav button.active{background:var(--blue);color:#fff}
+.container{max-width:1000px;margin:18px auto;padding:0 14px}
+.tab{display:none;background:#fff;padding:18px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.08);margin-bottom:18px}
+.tab.active{display:block}
+.item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee}
+.item button.add{background:var(--blue);color:#fff;border:none;padding:6px 10px;border-radius:8px;cursor:pointer}
+.item button.remove{background:#dc3545;color:#fff;border:none;padding:5px 8px;border-radius:6px;cursor:pointer}
+ul{list-style:none;padding:0;margin:0}
+input,select{padding:8px;margin:6px 0;border-radius:6px;border:1px solid #ddd;width:100%;box-sizing:border-box}
+.small{width:70px;display:inline-block}
+.flex{display:flex;gap:8px;align-items:center}
+.section-title{margin:0 0 8px 0}
+.order-details{margin-top:8px;color:#444;font-size:14px}
+.btn-primary{background:var(--blue);color:white;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+.btn-danger{background:#dc3545;color:white;border:none;padding:6px 10px;border-radius:8px;cursor:pointer}
+.codes-list li{margin:6px 0;padding:8px;background:#fafafa;border-radius:8px;border:1px solid #eee}
+.meta{color:#666;font-size:13px;margin-top:6px}
+.delete-order-btn{background:#e74c3c;color:white;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;margin-left:8px}
+.small-qty{width:60px}
+</style>
+</head>
+<body>
+<header><h1>Bar Pod Dzikiem - zamówienia</h1></header>
+
+<nav>
+  <button class="tab-btn active" data-tab="menuTab">Menu</button>
+  <button class="tab-btn" data-tab="historyTab">Historia</button>
+  <button class="tab-btn" data-tab="staffTab">Pracownicy</button>
+  <button class="tab-btn" data-tab="codesTab">Kody rabatowe</button>
+</nav>
+
+<div class="container">
+  <!-- MENU TAB -->
+  <div id="menuTab" class="tab active">
+    <h2 class="section-title">Menu</h2>
+    <div id="menuList"></div>
+
+    <h3 class="section-title" style="margin-top:18px">Aktualne zamówienie</h3>
+
+    <label>Osoba przyjmująca zamówienie:</label>
+    <select id="orderPerson"></select>
+
+    <label>Adresat / odbiorca:</label>
+    <input id="orderClient" placeholder="np. Jan Kowalski">
+
+    <label>Typ zamówienia:</label>
+    <select id="orderType">
+      <option value="na miejscu">Na miejscu</option>
+      <option value="na wynos">Na wynos (+1 zł/szt.)</option>
+      <option value="dostawa">Dostawa (+1 zł/szt. +15 zł)</option>
+    </select>
+
+    <label>Kod rabatowy (opcjonalnie):</label>
+    <select id="appliedCode"><option value="">-- wybierz kod --</option></select>
+
+    <ul id="orderList" class="order-details"></ul>
+
+    <div class="flex" style="align-items:center;gap:12px;margin-top:10px">
+      <div><strong>Łączna cena:</strong> <span id="totalPrice">0.00</span> zł</div>
+      <div style="margin-left:auto">
+        <button class="btn-primary" onclick="finalizeOrder()">✅ Zatwierdź zamówienie</button>
+        <button class="btn-danger" onclick="clearOrder()">Wyczyść</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="historyTab" class="tab">
+    <h2 class="section-title">Poprzednie zamówienia</h2>
+    <ul id="orderHistory"></ul>
+  </div>
+
+  <div id="staffTab" class="tab">
+    <h2 class="section-title">Szef i pracownicy</h2>
+    <div id="bossSection"></div>
+    <hr>
+    <div id="employeeSection"></div>
+  </div>
+
+
+  <div id="codesTab" class="tab">
+    <h2 class="section-title">Kody rabatowe</h2>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <label>Wartość rabatu:</label>
+        <input id="newCodeValue" type="number" min="1" placeholder="np. 20">
+      </div>
+
+      <div style="width:140px">
+        <label>Rodzaj:</label>
+        <select id="newCodeType">
+          <option value="%">Procent (%)</option>
+          <option value="zl">Kwota (zł)</option>
+        </select>
+      </div>
+
+      <div style="width:140px" id="maxUseWrapper">
+        <label>Liczba użyć:</label>
+        <input id="newCodeMaxUse" type="number" min="1" value="1">
+      </div>
+
+      <div style="min-width:160px;align-self:end">
+        <button class="btn-primary" onclick="generateCode()">Generuj kod</button>
+      </div>
+    </div>
+    <h3 style="margin-top:12px">Lista kodów</h3>
+    <ul id="codesList" class="codes-list"></ul>
+  </div>
+</div>
+
+<script>
+const menu = [
+  { name: "Margherita", price: 25 },
+  { name: "Salami", price: 30 },
+  { name: "Hawajska", price: 31 },
+  { name: "Familijna", price: 36 },
+  { name: "Pizza Dzika", price: 50 },
+  { name: "Wiejska", price: 41 },
+  { name: "Kotlet schabowy", price: 31 },
+  { name: "Rolada śląska", price: 33 },
+  { name: "Kotlet drobiowy", price: 31 },
+  { name: "Devolay", price: 36 },
+  { name: "Kurczak z grilla", price: 35 },
+  { name: "Rosół", price: 15 },
+  { name: "Pomidorowa", price: 15 },
+  { name: "Ogórkowa", price: 15 },
+  { name: "Żurek", price: 15 },
+  { name: "Chłodnik", price: 15 },
+  { name: "Krupnik", price: 15 },
+  { name: "Naleśniki z twarogiem", price: 25 },
+  { name: "Pierogi z jagodami", price: 25 },
+  { name: "Knedle ze śliwkami", price: 27 },
+  { name: "Placki z jabłkami", price: 30 },
+  { name: "Ryż z jabłkami", price: 28 },
+  { name: "Kluski leniwe", price: 26 },
+  { name: "Nuggetsy", price: 25 },
+  { name: "Makaron bolognese", price: 25 },
+  { name: "Makaron z pomidorami", price: 24 },
+  { name: "Cheeseburger (dziecięcy)", price: 27 },
+  { name: "Klasyczny sernik", price: 15 },
+  { name: "Szarlotka z lodami", price: 17 },
+  { name: "Fondant czekoladowy", price: 18 },
+  { name: "Kremówka", price: 16 },
+  { name: "Tiramisu", price: 20 },
+  { name: "Pączek", price: 7 },
+  { name: "Pączek dubajski", price: 10 },
+  { name: "Kotlet z dzika", price: 35 },
+  { name: "Stek z dzika", price: 40 },
+  { name: "Pierogi z mięsem z dzika", price: 30 },
+  { name: "Grillowany dzik", price: 36 },
+  { name: "Makaron dzika", price: 31 },
+  { name: "Grillowane żeberka z dzika", price: 53 },
+  { name: "Wojanek", price: 7 },
+  { name: "Sok jabłkowy", price: 8 },
+  { name: "Sok pomarańczowy", price: 8 },
+  { name: "Pepsi", price: 9 },
+  { name: "Mirinda", price: 9 },
+  { name: "Seven Up", price: 9 },
+  { name: "Piwo rycerskie 0,5l", price: 15 },
+  { name: "Piwo rycerskie 1l", price: 25 },
+  { name: "Piwo rycerskie 0% 0,5l", price: 15 },
+  { name: "Piwo rycerskie 0% 1l", price: 25 },
+  { name: "Bimber 0,5l", price: 65 },
+  { name: "Kawa czarna", price: 7 },
+  { name: "Cappucino", price: 8 },
+  { name: "Americana", price: 8 },
+  { name: "Latte Macchiato", price: 8 },
+  { name: "Espresso", price: 9 },
+  { name: "Zupa krem z dyni", price: 16 },
+  { name: "Papryka faszerowana", price: 24 },
+  { name: "Leczo", price: 25 },
+  { name: "Fasolka po bretońsku", price: 24 },
+  { name: "Kompot", price: 8 },
+  { name: "Sernik dyniowy", price: 13 },
+  { name: "Jajecznica", price: 12 },
+  { name: "Jajko sadzone", price: 13 },
+  { name: "Kanapka szefa", price: 18 },
+  { name: "Tost studencki", price: 7 },
+  { name: "Angielskie śniadanie", price: 21 },
+  { name: "Gofry z owocami", price: 17 },
+  { name: "Cheeseburger", price: 21 },
+  { name: "Dzik burger", price: 30 },
+  { name: "Burger tartak", price: 45 },
+  { name: "Burger koguta", price: 31 },
+  { name: "Burger Sum", price: 25 },
+  { name: "Vege burger", price: 30 }
+];
+
+let order = []; 
+let orderHistory = JSON.parse(localStorage.getItem('orderHistory')) || [];
+let staff = JSON.parse(localStorage.getItem('staff')) || { boss: null, workers: [] };
+let codes = JSON.parse(localStorage.getItem('codes')) || []; 
+
+function saveAll(){
+  localStorage.setItem('orderHistory', JSON.stringify(orderHistory));
+  localStorage.setItem('staff', JSON.stringify(staff));
+  localStorage.setItem('codes', JSON.stringify(codes));
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById(btn.dataset.tab).classList.add('active');
+    btn.classList.add('active');
+    if(btn.dataset.tab==='historyTab') renderOrderHistory();
+    if(btn.dataset.tab==='codesTab') { renderCodesList(); renderCodesDropdown(); }
+    if(btn.dataset.tab==='staffTab') renderStaff();
+  });
+});
+
+function renderMenu(){
+  const menuList = document.getElementById('menuList');
+  menuList.innerHTML = '';
+  menu.forEach((m, idx)=>{
+    const row = document.createElement('div');
+    row.className = 'item';
+    row.innerHTML = `<div>${idx+1}. <strong>${m.name}</strong> — ${m.price} zł</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="add" onclick="addToOrder(${idx})">Dodaj</button>
+      </div>`;
+    menuList.appendChild(row);
+  });
+  updatePersonSelect();
+  renderCodesDropdown();
+  updateOrderList();
+}
+
+function addToOrder(index){
+  const m = menu[index];
+  const ex = order.find(it=>it.name === m.name);
+  if(ex) ex.quantity++;
+  else order.push({ name: m.name, price: m.price, quantity: 1 });
+  updateOrderList();
+}
+
+function updateQuantity(i, val){
+  const q = parseInt(val);
+  if(!isNaN(q) && q>0){ order[i].quantity = q; updateOrderList(); }
+}
+function removeFromOrder(i){ order.splice(i,1); updateOrderList(); }
+function clearOrder(){ order = []; document.getElementById('orderClient').value=''; document.getElementById('appliedCode').value=''; updateOrderList(); }
+
+function getBaseSubtotal(){
+  let s = 0;
+  order.forEach(it=> s += it.price * it.quantity);
+  return s;
+}
+
+function updateOrderList(){
+  const list = document.getElementById('orderList');
+  list.innerHTML = '';
+  order.forEach((it,i)=>{
+    const li = document.createElement('li');
+    li.innerHTML = `${it.name} — ${it.price} zł x 
+      <input class="small-qty" type="number" min="1" value="${it.quantity}" onchange="updateQuantity(${i}, this.value)">
+      <button class="remove" onclick="removeFromOrder(${i})">Usuń</button>`;
+    list.appendChild(li);
+  });
+
+  let subtotal = getBaseSubtotal();
+  const type = document.getElementById('orderType').value;
+  const totalItems = order.reduce((s,i)=>s+i.quantity,0);
+
+  if(type === 'na wynos') subtotal += totalItems * 1;
+  if(type === 'dostawa') subtotal += totalItems * 1 + 15;
+
+  const appliedCode = document.getElementById('appliedCode').value;
+  let discount = 0;
+  const codeObj = codes.find(c=>c.code === appliedCode);
+  if(codeObj){
+    if(codeObj.type === '%'){
+      discount = subtotal * (codeObj.value / 100);
+    } else {
+      const remaining = codeObj.remaining ?? codeObj.value;
+      discount = Math.min(remaining, subtotal);
+    }
+  }
+  let total = subtotal - discount;
+  if(total < 0) total = 0;
+
+  const priceSpan = document.getElementById('totalPrice');
+  priceSpan.textContent = total.toFixed(2);
+  if(discount > 0){
+    priceSpan.textContent += ` (rabat: -${discount.toFixed(2)} zł)`;
+  }
+}
+
+function finalizeOrder(){
+  const person = document.getElementById('orderPerson').value.trim();
+  const client = document.getElementById('orderClient').value.trim();
+  const type = document.getElementById('orderType').value;
+  if(order.length === 0) return alert('Zamówienie jest puste!');
+  if(!person) return alert('Wybierz osobę przyjmującą zamówienie!');
+  if(!client) return alert('Podaj adresata / klienta!');
+
+  // compute subtotal and extras
+  let subtotal = getBaseSubtotal();
+  const totalItems = order.reduce((s,i)=>s+i.quantity,0);
+  if(type === 'takeaway') subtotal += totalItems * 1;
+  if(type === 'delivery') subtotal += totalItems * 1 + 15;
+
+
+  const applied = document.getElementById('appliedCode').value;
+  const codeObjIndex = codes.findIndex(c=>c.code === applied);
+  let discount = 0;
+  let appliedCodeSnapshot = null;
+
+  if(codeObjIndex > -1){
+    const codeObj = codes[codeObjIndex];
+    if(codeObj.type === '%'){
+      discount = subtotal * (codeObj.value / 100);
+      subtotal -= discount;
+     
+      codeObj.used = (codeObj.used||0) + 1;
+      if(codeObj.maxUse && codeObj.used >= codeObj.maxUse){
+        
+        codes.splice(codeObjIndex, 1);
+      } else {
+        codes[codeObjIndex] = codeObj;
+      }
+      appliedCodeSnapshot = { code: codeObj.code, type: '%', value: codeObj.value };
+    } else { 
+      const remaining = codeObj.remaining ?? codeObj.value;
+      discount = Math.min(remaining, subtotal);
+      subtotal -= discount;
+      const newRemaining = remaining - discount;
+      if(newRemaining <= 0){
+      
+        codes.splice(codeObjIndex, 1);
+      } else {
+        codes[codeObjIndex].remaining = newRemaining;
+      }
+      appliedCodeSnapshot = { code: codeObj.code, type: 'zl', value: codeObj.value, remainingAfter: Math.max(0, newRemaining).toFixed(2) };
+    }
+    saveAll();
+  }
+
+  if(subtotal < 0) subtotal = 0;
+
+  const savedOrder = {
+    items: order.map(i=>({ name: i.name, price: i.price, quantity: i.quantity })),
+    person, client, type,
+    subtotal: parseFloat(subtotal.toFixed(2)),
+    discount: parseFloat(discount.toFixed(2)),
+    total: parseFloat((subtotal).toFixed(2)),
+    code: appliedCodeSnapshot,
+    date: new Date().toLocaleString()
+  };
+
+  orderHistory.push(savedOrder);
+  saveAll();
+
+  // reset
+  order = [];
+  document.getElementById('orderClient').value = '';
+  document.getElementById('appliedCode').value = '';
+  updateOrderList();
+  renderOrderHistory();
+  renderCodesList();
+  renderCodesDropdown();
+
+  alert('Zamówienie zapisane.');
+}
+
+function renderOrderHistory(){
+  const ul = document.getElementById('orderHistory');
+  ul.innerHTML = '';
+  if(orderHistory.length === 0){ ul.innerHTML = '<li>Brak wcześniejszych zamówień.</li>'; return; }
+  [...orderHistory].reverse().forEach((o, idxRev)=>{
+    const originalIndex = orderHistory.length - 1 - idxRev;
+    const li = document.createElement('li');
+    li.className = 'codes-list';
+    li.style.marginBottom = '8px';
+    li.innerHTML = `<strong>${o.date}</strong> — <b>${o.client}</b> (przyjął: ${o.person})<br>
+      Typ: ${o.type} — Suma: <b>${o.total.toFixed(2)} zł</b> ${o.discount?`(rabat: ${o.discount.toFixed(2)} zł)`:''} <br>
+      Kod: ${o.code ? (o.code.code + (o.code.type==='zl' && o.code.remainingAfter ? ` (pozostało ${o.code.remainingAfter} zł)` : '')) : '-'}<br>
+      <div class="order-details">${o.items.map(it=>`• ${it.name} — ${it.price} zł x ${it.quantity}`).join('<br>')}</div>
+      <div style="margin-top:8px;"><button class="delete-order-btn" onclick="deleteOrder(${originalIndex})">🗑️ Usuń</button></div>`;
+    ul.appendChild(li);
+  });
+}
+
+function deleteOrder(idx){
+  if(!confirm('Czy na pewno usunąć to zamówienie z historii?')) return;
+  orderHistory.splice(idx,1);
+  saveAll();
+  renderOrderHistory();
+}
+
+
+function generateCode(){
+  const val = parseFloat(document.getElementById('newCodeValue').value);
+  const type = document.getElementById('newCodeType').value;
+  const maxUseInput = document.getElementById('newCodeMaxUse');
+  if(isNaN(val) || val <= 0) return alert('Podaj poprawną wartość rabatu.');
+
+  // generate XXXX-XXXX
+  const randomPart = ()=> Math.random().toString(36).substring(2,6).toUpperCase();
+  const newCodeStr = `${randomPart()}-${randomPart()}`;
+
+  if(type === '%'){
+    const maxUse = parseInt(maxUseInput.value) || 1;
+    const codeObj = { code: newCodeStr, type: '%', value: val, maxUse, used: 0 };
+    codes.push(codeObj);
+  } else {
+    const codeObj = { code: newCodeStr, type: 'zl', value: val, remaining: val };
+    codes.push(codeObj);
+  }
+
+  saveAll();
+  renderCodesList();
+  renderCodesDropdown();
+  document.getElementById('newCodeValue').value = '';
+  document.getElementById('newCodeMaxUse').value = '1';
+  alert('Wygenerowano kod: ' + newCodeStr);
+}
+
+function renderCodesList(){
+  const ul = document.getElementById('codesList');
+  ul.innerHTML = '';
+  if(codes.length === 0){ ul.innerHTML = '<li>Brak kodów.</li>'; return; }
+  codes.forEach((c, i)=>{
+    const li = document.createElement('li');
+    let info = '';
+    if(c.type === '%'){
+      info = `${c.value}% — użyto: ${c.used || 0}/${c.maxUse}`;
+    } else {
+      info = `${(c.remaining ?? c.value).toFixed(2)} zł pozostało (początkowo ${c.value} zł)`;
+    }
+    li.innerHTML = `<strong>${c.code}</strong> — ${info}
+      <div style="margin-top:6px;"><button class="btn-danger" onclick="deleteCode(${i})">Usuń</button></div>`;
+    ul.appendChild(li);
+  });
+}
+
+function deleteCode(i){
+  if(!confirm('Usuń ten kod?')) return;
+  codes.splice(i,1);
+  saveAll();
+  renderCodesList();
+  renderCodesDropdown();
+}
+
+function renderCodesDropdown(){
+  const sel = document.getElementById('appliedCode');
+  sel.innerHTML = '<option value="">-- wybierz kod --</option>';
+  codes.forEach(c=>{
+    if(c.type === '%'){
+      sel.innerHTML += `<option value="${c.code}">${c.code} (${c.value}% — ${ (c.maxUse - (c.used||0)) } pozostało)</option>`;
+    } else {
+      sel.innerHTML += `<option value="${c.code}">${c.code} (${ (c.remaining ?? c.value).toFixed(2) } zł pozostało)</option>`;
+    }
+  });
+}
+
+
+document.getElementById('newCodeType').addEventListener('change', function(){
+  const wrapper = document.getElementById('maxUseWrapper');
+  if(this.value === 'zl') wrapper.style.display = 'none';
+  else wrapper.style.display = 'block';
+});
+
+function renderStaff(){
+  const bossDiv = document.getElementById('bossSection');
+  const empDiv = document.getElementById('employeeSection');
+
+  bossDiv.innerHTML = '<h3>Szef</h3>';
+  if(staff.boss){
+    bossDiv.innerHTML += `<div style="display:flex;gap:8px;align-items:center"><input id="bossInput" value="${escapeHtml(staff.boss)}"> <button class="btn-primary" onclick="saveBoss()">Zapisz</button> <button class="btn-danger" onclick="removeBoss()">Usuń</button></div>`;
+  } else {
+    bossDiv.innerHTML += `<div style="display:flex;gap:8px;align-items:center"><input id="bossInput" placeholder="Wpisz imię szefa"> <button class="btn-primary" onclick="saveBoss()">Dodaj</button></div>`;
+  }
+
+  empDiv.innerHTML = '<h3>Pracownicy</h3>';
+  if(staff.workers && staff.workers.length){
+    const ul = document.createElement('ul');
+    staff.workers.forEach((w,i)=>{
+      const li = document.createElement('li');
+      li.style.marginBottom = '6px';
+      li.innerHTML = `<div style="display:flex;gap:8px;align-items:center">
+        <input id="workerInput_${i}" value="${escapeHtml(w)}">
+        <button class="btn-primary" onclick="saveWorker(${i})">Zapisz</button>
+        <button class="btn-danger" onclick="removeWorker(${i})">Usuń</button>
+      </div>`;
+      ul.appendChild(li);
+    });
+    empDiv.appendChild(ul);
+  } else {
+    empDiv.innerHTML += '<p>Brak pracowników.</p>';
+  }
+
+  empDiv.innerHTML += `<div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+      <input id="newWorkerInput" placeholder="Nowy pracownik">
+      <button class="btn-primary" onclick="addWorker()">Dodaj</button>
+    </div>`;
+
+  updatePersonSelect();
+}
+
+function saveBoss(){
+  const v = document.getElementById('bossInput').value.trim();
+  if(!v) return alert('Podaj imię szefa.');
+  staff.boss = v;
+  saveAll();
+  renderStaff();
+}
+
+function removeBoss(){
+  if(!confirm('Usunąć szefa?')) return;
+  staff.boss = null;
+  saveAll();
+  renderStaff();
+}
+
+function addWorker(){
+  const v = document.getElementById('newWorkerInput').value.trim();
+  if(!v) return alert('Podaj nazwę pracownika.');
+  staff.workers.push(v);
+  document.getElementById('newWorkerInput').value = '';
+  saveAll();
+  renderStaff();
+}
+
+function saveWorker(i){
+  const v = document.getElementById(`workerInput_${i}`).value.trim();
+  if(!v) return alert('Podaj nazwę pracownika.');
+  staff.workers[i] = v;
+  saveAll();
+  renderStaff();
+}
+
+function removeWorker(i){
+  if(!confirm('Usunąć pracownika?')) return;
+  staff.workers.splice(i,1);
+  saveAll();
+  renderStaff();
+}
+
+function updatePersonSelect(){
+  const sel = document.getElementById('orderPerson');
+  sel.innerHTML = '<option value="">-- wybierz --</option>';
+  if(staff.boss) sel.innerHTML += `<option value="${escapeHtml(staff.boss)}">SZEF: ${escapeHtml(staff.boss)}</option>`;
+  (staff.workers||[]).forEach(w => sel.innerHTML += `<option value="${escapeHtml(w)}">${escapeHtml(w)}</option>`);
+}
+
+function escapeHtml(text){
+  return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.getElementById('appliedCode').addEventListener('change', updateOrderList);
+document.getElementById('orderType').addEventListener('change', updateOrderList);
+
+(function init(){
+  const sOrderHistory = localStorage.getItem('orderHistory');
+  if(sOrderHistory) orderHistory = JSON.parse(sOrderHistory);
+  const sStaff = localStorage.getItem('staff');
+  if(sStaff) staff = JSON.parse(sStaff);
+  const sCodes = localStorage.getItem('codes');
+ 
+  if(sCodes) codes = JSON.parse(sCodes);
+  if(!staff || typeof staff !== 'object') staff = { boss: null, workers: [] };
+  if(!Array.isArray(staff.workers)) staff.workers = [];
+
+  renderMenu();
+  renderStaff();
+  renderCodesList();
+  renderCodesDropdown();
+  renderOrderHistory();
+  updateOrderList();
+})();
+
+</script>
+</body>
+</html>
