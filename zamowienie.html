@@ -1,606 +1,3490 @@
-<script type="module">
-
-  async function zapiszZamowienie(nazwa, cena) {
-    await addDoc(collection(baza, "zamowienia"), {
-      nazwa: nazwa,
-      cena: cena,
-      czas: new Date().toLocaleString()
-    })
-  }
-
-
-  async function pokazZamowienia() {
-    const wynik = await getDocs(collection(baza, "zamowienia"))
-    wynik.forEach(d => console.log(d.data()))
-  }
-
-</script>
-
 <!DOCTYPE html>
 <html lang="pl">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Bar Pod Dzikiem - zamówienia</title>
-<style>
-:root{--blue:#007bff;--muted:#f4f6f8}
-body{font-family:Arial,Helvetica,sans-serif;background:var(--muted);margin:0;padding:0}
-header{position:sticky;top:0;background:var(--blue);color:#fff;padding:12px;display:flex;justify-content:center;align-items:center;z-index:1000}
-header h1{margin:0;font-size:18px}
-nav{display:flex;justify-content:center;gap:8px;padding:10px;background:#333}
-nav button{background:#555;color:#fff;border:none;padding:9px 14px;border-radius:8px;cursor:pointer;font-weight:600}
-nav button.active{background:var(--blue);color:#fff}
-.container{max-width:1000px;margin:18px auto;padding:0 14px}
-.tab{display:none;background:#fff;padding:18px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.08);margin-bottom:18px}
-.tab.active{display:block}
-.item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee}
-.item button.add{background:var(--blue);color:#fff;border:none;padding:6px 10px;border-radius:8px;cursor:pointer}
-.item button.remove{background:#dc3545;color:#fff;border:none;padding:5px 8px;border-radius:6px;cursor:pointer}
-ul{list-style:none;padding:0;margin:0}
-input,select{padding:8px;margin:6px 0;border-radius:6px;border:1px solid #ddd;width:100%;box-sizing:border-box}
-.small{width:70px;display:inline-block}
-.flex{display:flex;gap:8px;align-items:center}
-.section-title{margin:0 0 8px 0}
-.order-details{margin-top:8px;color:#444;font-size:14px}
-.btn-primary{background:var(--blue);color:white;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
-.btn-danger{background:#dc3545;color:white;border:none;padding:6px 10px;border-radius:8px;cursor:pointer}
-.codes-list li{margin:6px 0;padding:8px;background:#fafafa;border-radius:8px;border:1px solid #eee}
-.meta{color:#666;font-size:13px;margin-top:6px}
-.delete-order-btn{background:#e74c3c;color:white;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;margin-left:8px}
-.small-qty{width:60px}
-</style>
-</head>
-<body>
-<header><h1>Bar Pod Dzikiem - zamówienia</h1></header>
-
-<nav>
-  <button class="tab-btn active" data-tab="menuTab">Menu</button>
-  <button class="tab-btn" data-tab="historyTab">Historia</button>
-  <button class="tab-btn" data-tab="staffTab">Pracownicy</button>
-  <button class="tab-btn" data-tab="codesTab">Kody rabatowe</button>
-</nav>
-
-<div class="container">
-  <!-- MENU TAB -->
-  <div id="menuTab" class="tab active">
-    <h2 class="section-title">Menu</h2>
-    <div id="menuList"></div>
-
-    <h3 class="section-title" style="margin-top:18px">Aktualne zamówienie</h3>
-
-    <label>Osoba przyjmująca zamówienie:</label>
-    <select id="orderPerson"></select>
-
-    <label>Adresat / odbiorca:</label>
-    <input id="orderClient" placeholder="np. Jan Kowalski">
-
-    <label>Typ zamówienia:</label>
-    <select id="orderType">
-      <option value="na miejscu">Na miejscu</option>
-      <option value="na wynos">Na wynos (+1 zł/szt.)</option>
-      <option value="dostawa">Dostawa (+1 zł/szt. +15 zł)</option>
-    </select>
-
-    <label>Kod rabatowy (opcjonalnie):</label>
-    <select id="appliedCode"><option value="">-- wybierz kod --</option></select>
-
-    <ul id="orderList" class="order-details"></ul>
-
-    <div class="flex" style="align-items:center;gap:12px;margin-top:10px">
-      <div><strong>Łączna cena:</strong> <span id="totalPrice">0.00</span> zł</div>
-      <div style="margin-left:auto">
-        <button class="btn-primary" onclick="finalizeOrder()">✅ Zatwierdź zamówienie</button>
-        <button class="btn-danger" onclick="clearOrder()">Wyczyść</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="historyTab" class="tab">
-    <h2 class="section-title">Poprzednie zamówienia</h2>
-    <ul id="orderHistory"></ul>
-  </div>
-
-  <div id="staffTab" class="tab">
-    <h2 class="section-title">Szef i pracownicy</h2>
-    <div id="bossSection"></div>
-    <hr>
-    <div id="employeeSection"></div>
-  </div>
-
-
-  <div id="codesTab" class="tab">
-    <h2 class="section-title">Kody rabatowe</h2>
-
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <div style="flex:1;min-width:180px">
-        <label>Wartość rabatu:</label>
-        <input id="newCodeValue" type="number" min="1" placeholder="np. 20">
-      </div>
-
-      <div style="width:140px">
-        <label>Rodzaj:</label>
-        <select id="newCodeType">
-          <option value="%">Procent (%)</option>
-          <option value="zl">Kwota (zł)</option>
-        </select>
-      </div>
-
-      <div style="width:140px" id="maxUseWrapper">
-        <label>Liczba użyć:</label>
-        <input id="newCodeMaxUse" type="number" min="1" value="1">
-      </div>
-
-      <div style="min-width:160px;align-self:end">
-        <button class="btn-primary" onclick="generateCode()">Generuj kod</button>
-      </div>
-    </div>
-    <h3 style="margin-top:12px">Lista kodów</h3>
-    <ul id="codesList" class="codes-list"></ul>
-  </div>
-</div>
-
-<script>
-const menu = [
-  { name: "Margherita", price: 25 },
-  { name: "Salami", price: 30 },
-  { name: "Hawajska", price: 31 },
-  { name: "Familijna", price: 36 },
-  { name: "Pizza Dzika", price: 50 },
-  { name: "Wiejska", price: 41 },
-  { name: "Kotlet schabowy", price: 31 },
-  { name: "Rolada śląska", price: 33 },
-  { name: "Kotlet drobiowy", price: 31 },
-  { name: "Devolay", price: 36 },
-  { name: "Kurczak z grilla", price: 35 },
-  { name: "Rosół", price: 15 },
-  { name: "Pomidorowa", price: 15 },
-  { name: "Ogórkowa", price: 15 },
-  { name: "Żurek", price: 15 },
-  { name: "Chłodnik", price: 15 },
-  { name: "Krupnik", price: 15 },
-  { name: "Naleśniki z twarogiem", price: 25 },
-  { name: "Pierogi z jagodami", price: 25 },
-  { name: "Knedle ze śliwkami", price: 27 },
-  { name: "Placki z jabłkami", price: 30 },
-  { name: "Ryż z jabłkami", price: 28 },
-  { name: "Kluski leniwe", price: 26 },
-  { name: "Nuggetsy", price: 25 },
-  { name: "Makaron bolognese", price: 25 },
-  { name: "Makaron z pomidorami", price: 24 },
-  { name: "Cheeseburger (dziecięcy)", price: 27 },
-  { name: "Klasyczny sernik", price: 15 },
-  { name: "Szarlotka z lodami", price: 17 },
-  { name: "Fondant czekoladowy", price: 18 },
-  { name: "Kremówka", price: 16 },
-  { name: "Tiramisu", price: 20 },
-  { name: "Pączek", price: 7 },
-  { name: "Pączek dubajski", price: 10 },
-  { name: "Kotlet z dzika", price: 35 },
-  { name: "Stek z dzika", price: 40 },
-  { name: "Pierogi z mięsem z dzika", price: 30 },
-  { name: "Grillowany dzik", price: 36 },
-  { name: "Makaron dzika", price: 31 },
-  { name: "Grillowane żeberka z dzika", price: 53 },
-  { name: "Wojanek", price: 7 },
-  { name: "Sok jabłkowy", price: 8 },
-  { name: "Sok pomarańczowy", price: 8 },
-  { name: "Pepsi", price: 9 },
-  { name: "Mirinda", price: 9 },
-  { name: "Seven Up", price: 9 },
-  { name: "Piwo rycerskie 0,5l", price: 15 },
-  { name: "Piwo rycerskie 1l", price: 25 },
-  { name: "Piwo rycerskie 0% 0,5l", price: 15 },
-  { name: "Piwo rycerskie 0% 1l", price: 25 },
-  { name: "Bimber 0,5l", price: 65 },
-  { name: "Kawa czarna", price: 7 },
-  { name: "Cappucino", price: 8 },
-  { name: "Americana", price: 8 },
-  { name: "Latte Macchiato", price: 8 },
-  { name: "Espresso", price: 9 },
-  { name: "Zupa krem z dyni", price: 16 },
-  { name: "Papryka faszerowana", price: 24 },
-  { name: "Leczo", price: 25 },
-  { name: "Fasolka po bretońsku", price: 24 },
-  { name: "Kompot", price: 8 },
-  { name: "Sernik dyniowy", price: 13 },
-  { name: "Jajecznica", price: 12 },
-  { name: "Jajko sadzone", price: 13 },
-  { name: "Kanapka szefa", price: 18 },
-  { name: "Tost studencki", price: 7 },
-  { name: "Angielskie śniadanie", price: 21 },
-  { name: "Gofry z owocami", price: 17 },
-  { name: "Cheeseburger", price: 21 },
-  { name: "Dzik burger", price: 30 },
-  { name: "Burger tartak", price: 45 },
-  { name: "Burger koguta", price: 31 },
-  { name: "Burger Sum", price: 25 },
-  { name: "Vege burger", price: 30 }
-];
-
-let order = []; 
-let orderHistory = JSON.parse(localStorage.getItem('orderHistory')) || [];
-let staff = JSON.parse(localStorage.getItem('staff')) || { boss: null, workers: [] };
-let codes = JSON.parse(localStorage.getItem('codes')) || []; 
-
-function saveAll(){
-  localStorage.setItem('orderHistory', JSON.stringify(orderHistory));
-  localStorage.setItem('staff', JSON.stringify(staff));
-  localStorage.setItem('codes', JSON.stringify(codes));
-}
-
-document.querySelectorAll('.tab-btn').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-    document.getElementById(btn.dataset.tab).classList.add('active');
-    btn.classList.add('active');
-    if(btn.dataset.tab==='historyTab') renderOrderHistory();
-    if(btn.dataset.tab==='codesTab') { renderCodesList(); renderCodesDropdown(); }
-    if(btn.dataset.tab==='staffTab') renderStaff();
-  });
-});
-
-function renderMenu(){
-  const menuList = document.getElementById('menuList');
-  menuList.innerHTML = '';
-  menu.forEach((m, idx)=>{
-    const row = document.createElement('div');
-    row.className = 'item';
-    row.innerHTML = `<div>${idx+1}. <strong>${m.name}</strong> — ${m.price} zł</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="add" onclick="addToOrder(${idx})">Dodaj</button>
-      </div>`;
-    menuList.appendChild(row);
-  });
-  updatePersonSelect();
-  renderCodesDropdown();
-  updateOrderList();
-}
-
-function addToOrder(index){
-  const m = menu[index];
-  const ex = order.find(it=>it.name === m.name);
-  if(ex) ex.quantity++;
-  else order.push({ name: m.name, price: m.price, quantity: 1 });
-  updateOrderList();
-}
-
-function updateQuantity(i, val){
-  const q = parseInt(val);
-  if(!isNaN(q) && q>0){ order[i].quantity = q; updateOrderList(); }
-}
-function removeFromOrder(i){ order.splice(i,1); updateOrderList(); }
-function clearOrder(){ order = []; document.getElementById('orderClient').value=''; document.getElementById('appliedCode').value=''; updateOrderList(); }
-
-function getBaseSubtotal(){
-  let s = 0;
-  order.forEach(it=> s += it.price * it.quantity);
-  return s;
-}
-
-function updateOrderList(){
-  const list = document.getElementById('orderList');
-  list.innerHTML = '';
-  order.forEach((it,i)=>{
-    const li = document.createElement('li');
-    li.innerHTML = `${it.name} — ${it.price} zł x 
-      <input class="small-qty" type="number" min="1" value="${it.quantity}" onchange="updateQuantity(${i}, this.value)">
-      <button class="remove" onclick="removeFromOrder(${i})">Usuń</button>`;
-    list.appendChild(li);
-  });
-
-  let subtotal = getBaseSubtotal();
-  const type = document.getElementById('orderType').value;
-  const totalItems = order.reduce((s,i)=>s+i.quantity,0);
-
-  if(type === 'na wynos') subtotal += totalItems * 1;
-  if(type === 'dostawa') subtotal += totalItems * 1 + 15;
-
-  const appliedCode = document.getElementById('appliedCode').value;
-  let discount = 0;
-  const codeObj = codes.find(c=>c.code === appliedCode);
-  if(codeObj){
-    if(codeObj.type === '%'){
-      discount = subtotal * (codeObj.value / 100);
-    } else {
-      const remaining = codeObj.remaining ?? codeObj.value;
-      discount = Math.min(remaining, subtotal);
-    }
-  }
-  let total = subtotal - discount;
-  if(total < 0) total = 0;
-
-  const priceSpan = document.getElementById('totalPrice');
-  priceSpan.textContent = total.toFixed(2);
-  if(discount > 0){
-    priceSpan.textContent += ` (rabat: -${discount.toFixed(2)} zł)`;
-  }
-}
-
-function finalizeOrder(){
-  const person = document.getElementById('orderPerson').value.trim();
-  const client = document.getElementById('orderClient').value.trim();
-  const type = document.getElementById('orderType').value;
-  if(order.length === 0) return alert('Zamówienie jest puste!');
-  if(!person) return alert('Wybierz osobę przyjmującą zamówienie!');
-  if(!client) return alert('Podaj adresata / klienta!');
-
-  // compute subtotal and extras
-  let subtotal = getBaseSubtotal();
-  const totalItems = order.reduce((s,i)=>s+i.quantity,0);
-  if(type === 'takeaway') subtotal += totalItems * 1;
-  if(type === 'delivery') subtotal += totalItems * 1 + 15;
-
-
-  const applied = document.getElementById('appliedCode').value;
-  const codeObjIndex = codes.findIndex(c=>c.code === applied);
-  let discount = 0;
-  let appliedCodeSnapshot = null;
-
-  if(codeObjIndex > -1){
-    const codeObj = codes[codeObjIndex];
-    if(codeObj.type === '%'){
-      discount = subtotal * (codeObj.value / 100);
-      subtotal -= discount;
-     
-      codeObj.used = (codeObj.used||0) + 1;
-      if(codeObj.maxUse && codeObj.used >= codeObj.maxUse){
-        
-        codes.splice(codeObjIndex, 1);
-      } else {
-        codes[codeObjIndex] = codeObj;
-      }
-      appliedCodeSnapshot = { code: codeObj.code, type: '%', value: codeObj.value };
-    } else { 
-      const remaining = codeObj.remaining ?? codeObj.value;
-      discount = Math.min(remaining, subtotal);
-      subtotal -= discount;
-      const newRemaining = remaining - discount;
-      if(newRemaining <= 0){
-      
-        codes.splice(codeObjIndex, 1);
-      } else {
-        codes[codeObjIndex].remaining = newRemaining;
-      }
-      appliedCodeSnapshot = { code: codeObj.code, type: 'zl', value: codeObj.value, remainingAfter: Math.max(0, newRemaining).toFixed(2) };
-    }
-    saveAll();
-  }
-
-  if(subtotal < 0) subtotal = 0;
-
-  const savedOrder = {
-    items: order.map(i=>({ name: i.name, price: i.price, quantity: i.quantity })),
-    person, client, type,
-    subtotal: parseFloat(subtotal.toFixed(2)),
-    discount: parseFloat(discount.toFixed(2)),
-    total: parseFloat((subtotal).toFixed(2)),
-    code: appliedCodeSnapshot,
-    date: new Date().toLocaleString()
-  };
-
-  orderHistory.push(savedOrder);
-  saveAll();
-
-  // reset
-  order = [];
-  document.getElementById('orderClient').value = '';
-  document.getElementById('appliedCode').value = '';
-  updateOrderList();
-  renderOrderHistory();
-  renderCodesList();
-  renderCodesDropdown();
-
-  alert('Zamówienie zapisane.');
-}
-
-function renderOrderHistory(){
-  const ul = document.getElementById('orderHistory');
-  ul.innerHTML = '';
-  if(orderHistory.length === 0){ ul.innerHTML = '<li>Brak wcześniejszych zamówień.</li>'; return; }
-  [...orderHistory].reverse().forEach((o, idxRev)=>{
-    const originalIndex = orderHistory.length - 1 - idxRev;
-    const li = document.createElement('li');
-    li.className = 'codes-list';
-    li.style.marginBottom = '8px';
-    li.innerHTML = `<strong>${o.date}</strong> — <b>${o.client}</b> (przyjął: ${o.person})<br>
-      Typ: ${o.type} — Suma: <b>${o.total.toFixed(2)} zł</b> ${o.discount?`(rabat: ${o.discount.toFixed(2)} zł)`:''} <br>
-      Kod: ${o.code ? (o.code.code + (o.code.type==='zl' && o.code.remainingAfter ? ` (pozostało ${o.code.remainingAfter} zł)` : '')) : '-'}<br>
-      <div class="order-details">${o.items.map(it=>`• ${it.name} — ${it.price} zł x ${it.quantity}`).join('<br>')}</div>
-      <div style="margin-top:8px;"><button class="delete-order-btn" onclick="deleteOrder(${originalIndex})">🗑️ Usuń</button></div>`;
-    ul.appendChild(li);
-  });
-}
-
-function deleteOrder(idx){
-  if(!confirm('Czy na pewno usunąć to zamówienie z historii?')) return;
-  orderHistory.splice(idx,1);
-  saveAll();
-  renderOrderHistory();
-}
-
-
-function generateCode(){
-  const val = parseFloat(document.getElementById('newCodeValue').value);
-  const type = document.getElementById('newCodeType').value;
-  const maxUseInput = document.getElementById('newCodeMaxUse');
-  if(isNaN(val) || val <= 0) return alert('Podaj poprawną wartość rabatu.');
-
-  // generate XXXX-XXXX
-  const randomPart = ()=> Math.random().toString(36).substring(2,6).toUpperCase();
-  const newCodeStr = `${randomPart()}-${randomPart()}`;
-
-  if(type === '%'){
-    const maxUse = parseInt(maxUseInput.value) || 1;
-    const codeObj = { code: newCodeStr, type: '%', value: val, maxUse, used: 0 };
-    codes.push(codeObj);
-  } else {
-    const codeObj = { code: newCodeStr, type: 'zl', value: val, remaining: val };
-    codes.push(codeObj);
-  }
-
-  saveAll();
-  renderCodesList();
-  renderCodesDropdown();
-  document.getElementById('newCodeValue').value = '';
-  document.getElementById('newCodeMaxUse').value = '1';
-  alert('Wygenerowano kod: ' + newCodeStr);
-}
-
-function renderCodesList(){
-  const ul = document.getElementById('codesList');
-  ul.innerHTML = '';
-  if(codes.length === 0){ ul.innerHTML = '<li>Brak kodów.</li>'; return; }
-  codes.forEach((c, i)=>{
-    const li = document.createElement('li');
-    let info = '';
-    if(c.type === '%'){
-      info = `${c.value}% — użyto: ${c.used || 0}/${c.maxUse}`;
-    } else {
-      info = `${(c.remaining ?? c.value).toFixed(2)} zł pozostało (początkowo ${c.value} zł)`;
-    }
-    li.innerHTML = `<strong>${c.code}</strong> — ${info}
-      <div style="margin-top:6px;"><button class="btn-danger" onclick="deleteCode(${i})">Usuń</button></div>`;
-    ul.appendChild(li);
-  });
-}
-
-function deleteCode(i){
-  if(!confirm('Usuń ten kod?')) return;
-  codes.splice(i,1);
-  saveAll();
-  renderCodesList();
-  renderCodesDropdown();
-}
-
-function renderCodesDropdown(){
-  const sel = document.getElementById('appliedCode');
-  sel.innerHTML = '<option value="">-- wybierz kod --</option>';
-  codes.forEach(c=>{
-    if(c.type === '%'){
-      sel.innerHTML += `<option value="${c.code}">${c.code} (${c.value}% — ${ (c.maxUse - (c.used||0)) } pozostało)</option>`;
-    } else {
-      sel.innerHTML += `<option value="${c.code}">${c.code} (${ (c.remaining ?? c.value).toFixed(2) } zł pozostało)</option>`;
-    }
-  });
-}
-
-
-document.getElementById('newCodeType').addEventListener('change', function(){
-  const wrapper = document.getElementById('maxUseWrapper');
-  if(this.value === 'zl') wrapper.style.display = 'none';
-  else wrapper.style.display = 'block';
-});
-
-function renderStaff(){
-  const bossDiv = document.getElementById('bossSection');
-  const empDiv = document.getElementById('employeeSection');
-
-  bossDiv.innerHTML = '<h3>Szef</h3>';
-  if(staff.boss){
-    bossDiv.innerHTML += `<div style="display:flex;gap:8px;align-items:center"><input id="bossInput" value="${escapeHtml(staff.boss)}"> <button class="btn-primary" onclick="saveBoss()">Zapisz</button> <button class="btn-danger" onclick="removeBoss()">Usuń</button></div>`;
-  } else {
-    bossDiv.innerHTML += `<div style="display:flex;gap:8px;align-items:center"><input id="bossInput" placeholder="Wpisz imię szefa"> <button class="btn-primary" onclick="saveBoss()">Dodaj</button></div>`;
-  }
-
-  empDiv.innerHTML = '<h3>Pracownicy</h3>';
-  if(staff.workers && staff.workers.length){
-    const ul = document.createElement('ul');
-    staff.workers.forEach((w,i)=>{
-      const li = document.createElement('li');
-      li.style.marginBottom = '6px';
-      li.innerHTML = `<div style="display:flex;gap:8px;align-items:center">
-        <input id="workerInput_${i}" value="${escapeHtml(w)}">
-        <button class="btn-primary" onclick="saveWorker(${i})">Zapisz</button>
-        <button class="btn-danger" onclick="removeWorker(${i})">Usuń</button>
-      </div>`;
-      ul.appendChild(li);
-    });
-    empDiv.appendChild(ul);
-  } else {
-    empDiv.innerHTML += '<p>Brak pracowników.</p>';
-  }
-
-  empDiv.innerHTML += `<div style="margin-top:8px;display:flex;gap:8px;align-items:center">
-      <input id="newWorkerInput" placeholder="Nowy pracownik">
-      <button class="btn-primary" onclick="addWorker()">Dodaj</button>
-    </div>`;
-
-  updatePersonSelect();
-}
-
-function saveBoss(){
-  const v = document.getElementById('bossInput').value.trim();
-  if(!v) return alert('Podaj imię szefa.');
-  staff.boss = v;
-  saveAll();
-  renderStaff();
-}
-
-function removeBoss(){
-  if(!confirm('Usunąć szefa?')) return;
-  staff.boss = null;
-  saveAll();
-  renderStaff();
-}
-
-function addWorker(){
-  const v = document.getElementById('newWorkerInput').value.trim();
-  if(!v) return alert('Podaj nazwę pracownika.');
-  staff.workers.push(v);
-  document.getElementById('newWorkerInput').value = '';
-  saveAll();
-  renderStaff();
-}
-
-function saveWorker(i){
-  const v = document.getElementById(`workerInput_${i}`).value.trim();
-  if(!v) return alert('Podaj nazwę pracownika.');
-  staff.workers[i] = v;
-  saveAll();
-  renderStaff();
-}
-
-function removeWorker(i){
-  if(!confirm('Usunąć pracownika?')) return;
-  staff.workers.splice(i,1);
-  saveAll();
-  renderStaff();
-}
-
-function updatePersonSelect(){
-  const sel = document.getElementById('orderPerson');
-  sel.innerHTML = '<option value="">-- wybierz --</option>';
-  if(staff.boss) sel.innerHTML += `<option value="${escapeHtml(staff.boss)}">SZEF: ${escapeHtml(staff.boss)}</option>`;
-  (staff.workers||[]).forEach(w => sel.innerHTML += `<option value="${escapeHtml(w)}">${escapeHtml(w)}</option>`);
-}
-
-function escapeHtml(text){
-  return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-document.getElementById('appliedCode').addEventListener('change', updateOrderList);
-document.getElementById('orderType').addEventListener('change', updateOrderList);
-
-(function init(){
-  const sOrderHistory = localStorage.getItem('orderHistory');
-  if(sOrderHistory) orderHistory = JSON.parse(sOrderHistory);
-  const sStaff = localStorage.getItem('staff');
-  if(sStaff) staff = JSON.parse(sStaff);
-  const sCodes = localStorage.getItem('codes');
- 
-  if(sCodes) codes = JSON.parse(sCodes);
-  if(!staff || typeof staff !== 'object') staff = { boss: null, workers: [] };
-  if(!Array.isArray(staff.workers)) staff.workers = [];
-
-  renderMenu();
-  renderStaff();
-  renderCodesList();
-  renderCodesDropdown();
-  renderOrderHistory();
-  updateOrderList();
-})();
-
-</script>
-</body>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width,initial-scale=1" />
+		<title>KFC/THREE GUYS - system zamówień</title>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+		<style>
+				:root {
+					--blue: #c51b1b;
+					--muted: #f6f7f9;
+					--green: #28a745;
+					--red: #dc3545;
+					--card-bg: #ffffff;
+					--muted-2: #eef2f6;
+				}
+
+				body {
+					font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+					background: linear-gradient(180deg, var(--muted), #ffffff);
+					margin: 0;
+					padding: 0;
+					color: #222;
+				}
+				header {
+					position: sticky;
+					top: 0;
+					background: white;
+					border-bottom: 1px solid #eee;
+					color: #111;
+					padding: 14px 18px;
+					display: flex;
+					justify-content: center;
+					align-items: center;
+					z-index: 1000;
+					box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+				}
+			header h1 {
+				margin: 0;
+				font-size: 18px;
+			}
+				nav {
+					display: flex;
+					justify-content: center;
+					gap: 8px;
+					padding: 12px;
+					overflow-x: auto;
+				}
+				nav button {
+					background: transparent;
+					color: #333;
+					border: 1px solid #e6e6e6;
+					padding: 8px 14px;
+					border-radius: 10px;
+					cursor: pointer;
+					flex-shrink: 0;
+					font-weight: 600;
+					box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+				}
+				nav button.active {
+					background: var(--blue);
+					color: #fff;
+					border-color: transparent;
+				}
+				.container {
+					max-width: 980px;
+					margin: 20px auto;
+					padding: 0 16px 40px 16px;
+				}
+				.tab {
+					display: none;
+					background: var(--card-bg);
+					padding: 18px;
+					border-radius: 10px;
+					box-shadow: 0 6px 18px rgba(0, 0, 0, 0.04);
+					margin-bottom: 18px;
+				}
+				.tab.active {
+					display: block;
+				}
+			.item {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				padding: 8px 0;
+				border-bottom: 1px solid #eee;
+			}
+			.item button.add {
+				background: var(--blue);
+				color: #fff;
+				border: none;
+				padding: 6px 10px;
+				border-radius: 8px;
+				cursor: pointer;
+			}
+			.item button.remove {
+				background: var(--red);
+				color: #fff;
+				border: none;
+				padding: 5px 8px;
+				border-radius: 6px;
+				cursor: pointer;
+			}
+			ul {
+				list-style: none;
+				padding: 0;
+				margin: 0;
+			}
+				input,
+				select, textarea {
+					padding: 10px 12px;
+					margin: 6px 0;
+					border-radius: 8px;
+					border: 1px solid #e3e7ea;
+					width: 100%;
+					box-sizing: border-box;
+					background: #fff;
+				}
+				textarea { resize: vertical; }
+			input[list] {
+				margin-top: 6px;
+			}
+			.small {
+				width: 70px;
+				display: inline-block;
+			}
+			.flex {
+				display: flex;
+				gap: 8px;
+				align-items: center;
+			}
+			.section-title {
+				margin: 0 0 8px 0;
+			}
+			.order-details {
+				margin-top: 8px;
+				color: #444;
+				font-size: 14px;
+			}
+				.btn-primary {
+					background: var(--blue);
+					color: white;
+					border: none;
+					padding: 10px 14px;
+					border-radius: 10px;
+					cursor: pointer;
+					box-shadow: 0 6px 12px rgba(197,27,27,0.12);
+				}
+			.btn-danger {
+				background: var(--red);
+				color: white;
+				border: none;
+				padding: 6px 10px;
+				border-radius: 8px;
+				cursor: pointer;
+			}
+			.btn-reset {
+				background: #ffc107;
+				color: #333;
+				border: none;
+				padding: 8px 12px;
+				border-radius: 8px;
+				cursor: pointer;
+				font-weight: bold;
+			}
+				.codes-list li {
+					margin: 8px 0;
+					padding: 12px;
+					background: #fff;
+					border-radius: 10px;
+					border: 1px solid #f0f0f0;
+				}
+			.meta {
+				color: #666;
+				font-size: 13px;
+				margin-top: 6px;
+			}
+			.delete-order-btn {
+				background: #e74c3c;
+				color: white;
+				border: none;
+				padding: 4px 8px;
+				border-radius: 6px;
+				cursor: pointer;
+				margin-left: 8px;
+			}
+			.small-qty {
+				width: 60px;
+			}
+			.client-item-content strong {
+				font-size: 16px;
+				display: block;
+				margin-bottom: 4px;
+			}
+			.client-item-content small {
+				color: #666;
+			}
+			.client-actions {
+				margin-left: 10px;
+			}
+			.client-actions button {
+				margin-left: 5px;
+			}
+
+				.receipt-content {
+					width: 80mm;
+					padding: 5mm;
+					font-family: monospace;
+					font-size: 10px;
+					color: #000;
+				}
+
+				/* Kody rabatowe - bardziej kontrastowe i proste ramki */
+				#codesTab input,
+				#codesTab select,
+				#codesTab textarea {
+					border-radius: 0;
+					border: 2px solid #c51b1b;
+					background: #fff;
+					padding: 10px 12px;
+					box-shadow: none;
+				}
+
+				#codesTab input:focus,
+				#codesTab select:focus,
+				#codesTab textarea:focus {
+					outline: none;
+					border-color: #8f1414;
+					box-shadow: 0 0 0 4px rgba(197,27,27,0.08);
+				}
+			.receipt-center {
+				text-align: center;
+				margin-bottom: 2px;
+			}
+			.receipt-line {
+				border-top: 1px dashed #000;
+				margin: 5px 0;
+			}
+			.receipt-item-row {
+				display: flex;
+				justify-content: space-between;
+				margin-bottom: 1px;
+			}
+			.receipt-total-row {
+				font-size: 1.2em;
+				font-weight: bold;
+				margin-top: 5px;
+			}
+
+			#loyaltyClientsList {
+				margin-top: 10px;
+				padding: 0;
+			}
+
+			.loyalty-promo-products {
+				border: 1px dashed #ccc;
+				padding: 8px;
+				margin-top: 5px;
+				border-radius: 6px;
+			}
+			#menuCategories {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 8px;
+				margin-bottom: 15px;
+			}
+			#menuCategories button {
+				background: #e9ecef;
+				color: #495057;
+				border: 1px solid #ced4da;
+				padding: 8px 12px;
+				border-radius: 6px;
+				cursor: pointer;
+			}
+			#menuCategories button.active {
+				background: var(--blue);
+				color: white;
+				border-color: var(--blue);
+			}
+			#searchBar {
+				margin-bottom: 15px;
+			}
+			#searchBar input {
+				width: 100%;
+				padding: 10px;
+				border: 1px solid #ddd;
+				border-radius: 6px;
+				box-sizing: border-box;
+			}
+			.menu-category-title {
+				margin: 20px 0 10px 0 !important;
+				padding-top: 10px;
+				border-top: 2px solid var(--blue);
+			}
+		</style>
+	</head>
+	<body onload="init()">
+		<div
+			id="ageModal"
+			style="
+				display: none;
+				position: fixed;
+				z-index: 9999;
+				left: 0;
+				top: 0;
+				width: 100%;
+				height: 100%;
+				background: rgba(0, 0, 0, 0.8);
+				color: white;
+				text-align: center;
+				padding-top: 100px;
+			"
+		>
+			<div
+				style="
+					background: #222;
+					width: 300px;
+					margin: auto;
+					padding: 20px;
+					border-radius: 12px;
+					border: 2px solid var(--blue);
+				"
+			>
+				<h3>Weryfikacja Wieku</h3>
+				<p>Podaj datę urodzenia klienta:</p>
+				<input
+					type="date"
+					id="birthDateInput"
+					style="width: 80%; margin-bottom: 15px"
+				/>
+				<div
+					id="ageInfo"
+					style="margin-bottom: 15px; font-weight: bold"
+				></div>
+				<button class="btn-primary" onclick="potwierdzWiek()">
+					Zatwierdź
+				</button>
+				<button
+					class="btn-danger"
+					onclick="document.getElementById('ageModal').style.display='none'"
+				>
+					Anuluj
+				</button>
+			</div>
+		</div>
+
+		<header><h1>KFC/THREE GUYS - system zamówień</h1></header>
+
+		<nav>
+			<button class="tab-btn active" data-tab="menuTab">Menu</button>  
+			<button class="tab-btn" data-tab="loyaltyTab">Lojalność</button>  
+			<button class="tab-btn" data-tab="historyTab">Historia</button>  
+			<button class="tab-btn" data-tab="staffTab">Pracownicy</button>  
+			<button class="tab-btn" data-tab="codesTab">Kody rabatowe</button>  
+		</nav>
+
+		<div class="container">
+			 
+			<div id="menuTab" class="tab active">
+				   
+				<h2 class="section-title">Menu</h2>
+
+				   
+				<div id="searchBar">
+					       
+					<input
+						type="text"
+						id="menuSearch"
+						placeholder="Wyszukaj produkt po nazwie..."
+						onkeyup="renderujMenu()"
+					/>
+					   
+				</div>
+				   
+				<div id="menuCategories"></div>
+				       
+				<div id="menuList"></div>
+				       
+				<h2 class="section-title" style="margin-top: 18px">
+					Pozycja niestandardowa
+				</h2>
+				   
+
+				<div
+					id="zestawyInfo"
+					style="
+						display: none;
+						margin-bottom: 15px;
+						padding: 10px;
+						border: 1px dashed var(--green);
+						border-radius: 8px;
+						background: #e6ffe6;
+					"
+				>
+					<strong>Zestaw:</strong><br />
+					Burger / Wrap + Frytki + Napój = <strong>–10.00 USD</strong>
+				</div>
+
+				<div
+					style="
+						padding: 10px;
+						border: 1px dashed #ccc;
+						margin-bottom: 15px;
+						border-radius: 8px;
+					"
+				>
+					       
+					<div
+						style="display: flex; gap: 10px; align-items: flex-end"
+					>
+						           
+						<div style="flex-grow: 1">
+							                <label>Nazwa produktu:</label>      
+							          <input id="customItemName" value="" />    
+							       
+						</div>
+						           
+						<div style="width: 120px">
+							                <label>Cena (USD):</label>          
+							     
+							<input
+								id="customItemPrice"
+								type="number"
+								min="0.01"
+								step="0.01"
+								value=""
+							/>
+							           
+						</div>
+						           
+						<div>
+							               
+							<button
+								class="btn-primary"
+								onclick="dodajPozycjeNiestandardowa()"
+								style="padding: 8px 12px; margin-bottom: 6px"
+							>
+								Dodaj do zamówienia
+							</button>
+							           
+						</div>
+						       
+					</div>
+					   
+				</div>
+				       
+				<h3 class="section-title" style="margin-top: 18px">
+					Aktualne zamówienie
+				</h3>
+
+				    <label>Osoba przyjmująca zamówienie:</label>    
+				<select id="orderPerson"></select>
+
+				<h4 style="margin: 15px 0 5px 0">Klient:</h4>
+				<input
+					id="orderClient"
+					list="loyalClientsDataList"
+					oninput="przypiszKlientaLojalnosciowego()"
+					style="margin-bottom: 15px"
+				/>
+				<datalist id="loyalClientsDataList"></datalist>
+
+				<div
+					id="loyaltyPointsDisplay"
+					style="
+						margin-bottom: 15px;
+						border: 1px dashed var(--green);
+						padding: 8px;
+						border-radius: 8px;
+						display: none;
+						background: #e6ffe6;
+					"
+				>
+					<strong id="clientPointsInfo"></strong>
+					<p style="margin: 5px 0 0 0; font-size: 14px">
+						<label>Użyj punktów (0.05 USD/pkt):</label>
+						<input
+							type="number"
+							id="pointsToUse"
+							min="0"
+							value="0"
+							onchange="aktualizujListeZamowienia()"
+							style="
+								width: 100px;
+								display: inline-block;
+								margin: 0 5px;
+							"
+						/>
+						<button
+							class="btn-primary"
+							style="padding: 5px 10px; background: var(--green)"
+							onclick="uzyjMaxPunktow()"
+						>
+							Max
+						</button>
+					</p>
+					<div id="loyaltyPromotions" style="margin-top: 10px"></div>
+				</div>
+
+				<label>Typ zamówienia:</label>
+				<select
+					id="orderType"
+					onchange="przelaczPolaDostawy(); aktualizujListeZamowienia()"
+				>
+					<option value="na miejscu">Na miejscu</option>
+					<option value="na wynos">Na wynos (+0.50 USD/szt.)</option>
+					<option value="samochod">
+						Samochód (jak na wynos, bez alkoholu)
+					</option>
+					<option value="dostawa">
+						Dostawa (Na razie niedostępna!)
+					</option>
+				</select>
+
+				   
+				<div
+					id="deliveryFields"
+					style="
+						display: none;
+						margin-top: 10px;
+						border-top: 1px solid #ddd;
+						padding-top: 10px;
+					"
+				>
+					        <label>Miejscowość:</label>        
+					<input id="deliveryCity" />         <label>Ulica:</label>  
+					      <input id="deliveryStreet" />        
+					<label>Uwagi do dostawy:</label>        
+					<input id="deliveryNumber" />    
+				</div>
+
+				    <label>Kod rabatowy (opcjonalnie):</label>    
+				<select id="appliedCode" onchange="aktualizujListeZamowienia()">
+					<option value="">-- wybierz kod --</option>
+				</select>
+
+				<ul id="orderList" class="order-details"></ul>
+
+				   
+				<div
+					class="flex"
+					style="align-items: center; gap: 12px; margin-top: 10px"
+				>
+					     
+					<div>
+						<strong>Łączna cena:</strong>
+						<span id="totalPrice">0.00</span> USD
+					</div>
+					     
+					<div style="margin-left: auto">
+						         
+						<button
+							class="btn-primary"
+							onclick="finalizujZamowienie()"
+						>
+							Zatwierdź zamówienie
+						</button>
+						         
+						<button
+							class="btn-primary"
+							style="background: #4caf50"
+							onclick="generujParagonDlaBiezacegoZamowienia()"
+						>
+							Generuj paragon
+						</button>
+						         
+						<button
+							class="btn-danger"
+							onclick="wyczyscZamowienie()"
+						>
+							Wyczyść
+						</button>
+						   
+					</div>
+
+					   
+				</div>
+				 
+			</div>
+
+			<div
+				id="paryInfo"
+				style="
+					display: none;
+					margin-bottom: 15px;
+					padding: 10px;
+					border: 1px dashed #ccc;
+					border-radius: 8px;
+					background: #fff8e6;
+				"
+			>
+				<strong>Rabat za pary burgerów/wrapów:</strong><br />
+				2x tego samego burgera/wrapa = <strong>–10.00 USD</strong>
+			</div>
+
+			 
+			<div id="loyaltyTab" class="tab">
+				   
+				<h2 class="section-title">Klienci Lojalnościowi</h2>
+				<div
+					style="
+						padding: 10px;
+						border: 1px dashed var(--blue);
+						margin-bottom: 20px;
+						border-radius: 8px;
+					"
+				>
+					<h3 class="section-title">
+						Dodaj nowego klienta lojalnościowego (Aktywacja: 5.00
+						USD)
+					</h3>
+					<label>Imię i Nazwisko:</label>
+					<input id="newLoyaltyClientName" />
+					<button
+						class="btn-primary"
+						style="margin-top: 10px"
+						onclick="dodajKlientaLojalnosciowego()"
+					>
+						Dodaj Klienta (Aktywacja 5.00 USD)
+					</button>
+				</div>
+				<ul id="loyaltyClientsList" class="codes-list"></ul>
+
+				<hr style="margin: 20px 0" />
+
+				<h2 class="section-title">Promocje Lojalnościowe</h2>
+				<div
+					style="
+						padding: 10px;
+						border: 1px dashed var(--green);
+						margin-bottom: 20px;
+						border-radius: 8px;
+					"
+				>
+					<h3 class="section-title">Dodaj nową promocję</h3>
+					<label>Nazwa promocji (np. Darmowa Mała Frytka):</label>
+					<input id="promoName" />
+					<label>Wymagana ilość punktów:</label>
+					<input
+						id="promoPoints"
+						type="number"
+						min="1"
+						value="1000"
+					/>
+					<label>Działanie promocji:</label>
+					<select id="promoAction">
+						<option value="discount">
+							Rabat Kwotowy (np. 5.00 USD)
+						</option>
+						<option value="item_free">
+							Darmowy produkt/produkty (np. Mała Frytka)
+						</option>
+					</select>
+
+					<div id="promoValueWrapper" style="margin-top: 10px">
+						<label>Wartość rabatu (USD):</label>
+						<input
+							id="promoValue"
+							type="number"
+							min="0.01"
+							step="0.01"
+							value="5.00"
+						/>
+					</div>
+
+					<div
+						id="promoProductsWrapper"
+						style="margin-top: 10px; display: none"
+					>
+						<label
+							>Produkty objęte promocją (wybierz z listy,
+							wielokrotny wybór z CTRL/CMD):</label
+						>
+						<select
+							id="promoProducts"
+							multiple
+							size="5"
+							style="height: auto"
+						></select>
+					</div>
+
+					<button
+						class="btn-primary"
+						style="margin-top: 10px; background: var(--green)"
+						onclick="dodajPromocjeLojalnosciowa()"
+					>
+						Dodaj Promocję
+					</button>
+				</div>
+
+				<h3 class="section-title">Lista Aktywnych Promocji</h3>
+				<ul id="loyaltyPromotionsList" class="codes-list"></ul>
+				 
+			</div>
+
+			 
+			<div id="historyTab" class="tab">
+				   
+				<h2 class="section-title">Poprzednie zamówienia</h2>
+				   
+				<div style="margin-bottom: 15px">
+					       
+					<button class="btn-reset" onclick="wyczyscCalaHistorie()">
+						Usuń całą historię zamówień
+					</button>
+					   
+				</div>
+				   
+				<ul id="orderHistory"></ul>
+				 
+			</div>
+
+			 
+			<div id="staffTab" class="tab">
+				   
+				<h2 class="section-title">Szef i pracownicy</h2>
+
+				<div
+					style="
+						padding: 10px;
+						border: 1px dashed #ccc;
+						margin-bottom: 15px;
+						border-radius: 8px;
+					"
+				>
+					<h3 class="section-title">Dodaj nową osobę</h3>
+					<label>Imię nowej osoby:</label>
+					<input id="newStaffName" />
+					<div style="display: flex; gap: 10px; margin-top: 10px">
+						<button
+							class="btn-primary"
+							style="flex-grow: 1; background: var(--green)"
+							onclick="dodajPracownika('pracownik')"
+						>
+							Dodaj jako Pracownika
+						</button>
+						<button
+							class="btn-primary"
+							style="flex-grow: 1; background: var(--red)"
+							onclick="dodajPracownika('szef')"
+						>
+							Mianuj Szefem
+						</button>
+					</div>
+				</div>
+
+				   
+				<div id="bossSection"></div>
+				   
+				<hr />
+				   
+				<div id="employeeSection"></div>
+				 
+			</div>
+
+			 
+			<div id="codesTab" class="tab">
+				   
+				<h2 class="section-title">Kody rabatowe</h2>
+
+				   
+				<div style="display: flex; gap: 8px; flex-wrap: wrap">
+					     
+					<div style="flex: 1; min-width: 180px">
+						        <label>Wartość rabatu:</label>        
+						<input id="newCodeValue" type="number" min="1" />      
+						 
+					</div>
+					       
+					<div style="flex: 1; min-width: 180px">
+						           
+						<label>Własna nazwa kodu (nieobowiązkowa):</label>      
+						      <input id="customCodeName" value="" />        
+					</div>
+
+					     
+					<div style="width: 140px">
+						        <label>Rodzaj:</label>        
+						<select id="newCodeType">
+							         
+							<option value="%">Procent (%)</option>
+							         
+							<option value="usd">Kwota (USD)</option>
+							       
+						</select>
+						 
+					</div>
+
+					     
+					<div style="width: 140px" id="maxUseWrapper">
+						        <label>Liczba użyć:</label>        
+						<input
+							id="newCodeMaxUse"
+							type="number"
+							min="1"
+							value="1"
+						/>
+						     
+					</div>
+
+					     
+					<div style="width: 180px">
+						        <label>Tryb kodu:</label>        
+						<select id="newCodeMode">
+							<option value="one_time">
+								Jednorazowy / pulowy
+							</option>
+							<option value="per_use">
+								Stały na X użyć (np. 10 USD na 10 zamówień)
+							</option>
+						</select>
+						 
+					</div>
+
+					     
+					<div style="min-width: 160px; align-self: end">
+						       
+						<button class="btn-primary" onclick="generujKod()">
+							Generuj/Dodaj kod
+						</button>
+						     
+					</div>
+					   
+				</div>
+				   
+				<h3 style="margin-top: 12px">Lista kodów</h3>
+				   
+				<ul id="codesList" class="codes-list"></ul>
+				 
+
+					<hr style="margin: 16px 0" />
+
+					<h3 class="section-title">Karta podarunkowa</h3>
+					<div style="padding:10px; border:1px dashed #ccc; border-radius:8px; background:#fafafa;">
+						<label>Kwota karty (USD):</label>
+						<input id="giftAmount" type="number" min="1" step="0.01" placeholder="np. 50.00" />
+
+						<div style="display:flex; gap:8px; margin-top:8px;">
+							<div style="flex:1; min-width:140px;">
+								<label>Imię i nazwisko kupującego:</label>
+								<input id="giftBuyer" placeholder="Imię Nazwisko" />
+							</div>
+							<div style="flex:1; min-width:140px;">
+								<label>Imię i nazwisko obdarowującego:</label>
+								<input id="giftGiver" placeholder="Imię Nazwisko" />
+							</div>
+						</div>
+
+						<label style="margin-top:8px; display:block;">Krótkie życzenia (opcjonalnie):</label>
+						<textarea id="giftWishes" rows="3" style="width:100%; box-sizing:border-box; border-radius:6px; border:1px solid #ddd; padding:8px;"></textarea>
+
+						<div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+							<button class="btn-primary" onclick="generujKartePodarunkowa()">Utwórz kartę i dodaj do zamówienia</button>
+							<small class="meta">Po utworzeniu karta zostanie dodana do listy kodów i można pobrać PDF z kodem.</small>
+						</div>
+					</div>
+			</div>
+		</div>
+
+		<div
+			id="receiptContainer"
+			style="position: absolute; left: -9999px"
+		></div>
+
+		<script>
+			const menu = [
+				// BURGERY / WRAPY (01 - 12)
+				{
+					id: "01",
+					nazwa: "Chickburger",
+					cena: 20.0,
+					kategoria: "Burgery/Wrapy",
+					opis: "(mięso z kurczaka, sałata, sos majonezowy)",
+				},
+				{
+					id: "02",
+					nazwa: "Porkburger",
+					cena: 20.0,
+					kategoria: "Burgery/Wrapy",
+					opis: "(wieprzowina, ser, sałata, sos majonezowy)",
+				},
+				{
+					id: "03",
+					nazwa: "Hotburger",
+					cena: 22.0,
+					kategoria: "Burgery/Wrapy",
+					opis: "(papryczki jalapeno, mięso wołowe, ser, boczek, sos majonezowy)",
+				},
+				{
+					id: "04",
+					nazwa: "Extraburger",
+					cena: 20.0,
+					kategoria: "Burgery/Wrapy",
+					opis: "(mięso z kurczaka, ser, czerwona cebula, pomidory, boczek, sos czosnkowy)",
+				},
+				{
+					id: "05",
+					nazwa: "Fitburger",
+					cena: 20.0,
+					kategoria: "Burgery/Wrapy",
+					opis: "(placek sera, czerwona cebula, sałata, pomidory, papryka, sos majonezowy)",
+				},
+				{
+					id: "06",
+					nazwa: "Chefburger",
+					cena: 23.0,
+					kategoria: "Burgery/Wrapy",
+					opis: "(mięso wołowe, kurczak, ser, pomidory, sos czosnkowy)",
+				},
+				{
+					id: "07",
+					nazwa: "Cheeseburger",
+					cena: 21.0,
+					kategoria: "Burgery/Wrapy",
+					opis: "(2 placki sera, wołowina, sałata, sos majonezowy)",
+				},
+				{
+					id: "08",
+					nazwa: "Baconburger",
+					cena: 22.0,
+					kategoria: "Burgery/Wrapy",
+					opis: "(wołowina, podwójny boczek, ser cheddar, cebula prażona, sos BBQ)",
+				},
+				{
+					id: "09",
+					nazwa: "Fishburger",
+					cena: 20.0,
+					kategoria: "Burgery/Wrapy",
+					opis: "(panierowany filet z ryby, sałata, sos tatarski)",
+				},
+				{
+					id: "10",
+					nazwa: "Maxburger",
+					cena: 20.0,
+					kategoria: "Burgery/Wrapy",
+					opis: "(3x mięso wołowe, 3x ser, potrójny boczek, sos majonezowy)",
+				},
+				{
+					id: "11",
+					nazwa: "Rizzburger",
+					cena: 20.0,
+					kategoria: "Burgery/Wrapy",
+					opis: "(mięso z kurczaka, strzelający ser, ogórek kiszony, sos majonezowy)",
+				},
+				{
+					id: "12",
+					nazwa: "Chickwrap",
+					cena: 20.0,
+					kategoria: "Burgery/Wrapy",
+					opis: "(tortilla, panierowany kurczak, ser, papryka, cebula, śmietana)",
+				},
+
+				// DODATKI (13 - 21)
+				{
+					id: "13",
+					nazwa: "Hotdog",
+					cena: 10.0,
+					kategoria: "Dodatki",
+					opis: "(parówka wołowa, bułka, keczup, musztarda)",
+				},
+				{
+					id: "14",
+					nazwa: "Bigdog",
+					cena: 16.0,
+					kategoria: "Dodatki",
+					opis: "(duża parówka wołowa, bułka, keczup, musztarda)",
+				},
+				{
+					id: "15",
+					nazwa: "Sałatka po cesarsku",
+					cena: 22.0,
+					kategoria: "Dodatki",
+					opis: "(rzymska sałata, kurczak, parmezan, grzanki, sos cezar)",
+				},
+				{
+					id: "16",
+					nazwa: "Fish&Chips",
+					cena: 23.0,
+					kategoria: "Dodatki",
+					opis: "(panierowany dorsz, frytki, sos tatarski)",
+				},
+				{
+					id: "17",
+					nazwa: "Macbacon",
+					cena: 20.0,
+					kategoria: "Dodatki",
+					opis: "(makaron, sos serowy, bekon, cebulka prażona)",
+				},
+				{
+					id: "18",
+					nazwa: "Grill-box",
+					cena: 25.0,
+					kategoria: "Dodatki",
+					opis: "(żeberka wieprzowe BBQ, frytki, surówka)",
+				},
+				{
+					id: "19",
+					nazwa: "Fish-basket",
+					cena: 24.0,
+					kategoria: "Dodatki",
+					opis: "(krewetki w panierce, frytki, sos koktajlowy)",
+				},
+				{
+					id: "20",
+					nazwa: "Onion-rings",
+					cena: 13.0,
+					kategoria: "Dodatki",
+					opis: "(10 krążków cebulowych w panierce)",
+				},
+				{
+					id: "21",
+					nazwa: "Police donut",
+					cena: 8.0,
+					kategoria: "Dodatki",
+					opis: "(klasyczny pączek z dziurką)",
+				},
+
+				// FRYTKI (22 - 25)
+				{
+					id: "22",
+					nazwa: "Frytki małe",
+					cena: 10.0,
+					kategoria: "Frytki",
+					opis: "(klasyczne solone frytki cienko cięte)",
+				},
+				{
+					id: "23",
+					nazwa: "Frytki duże",
+					cena: 15.0,
+					kategoria: "Frytki",
+					opis: "(duża porcja frytek)",
+				},
+				{
+					id: "24",
+					nazwa: "Cheese-fries",
+					cena: 14.0,
+					kategoria: "Frytki",
+					opis: "(frytki polane ciepłym sosem serowym)",
+				},
+				{
+					id: "25",
+					nazwa: "Bacon-fries",
+					cena: 15.0,
+					kategoria: "Frytki",
+					opis: "(frytki z sosem serowym i boczkiem)",
+				},
+
+				// MIĘSO (26 - 28)
+				{
+					id: "26",
+					nazwa: "Tenders",
+					cena: 23.0,
+					kategoria: "Mięso",
+					opis: "(5 dużych stripsów, frytki, sos BBQ)",
+				},
+				{
+					id: "27",
+					nazwa: "Nuggetsy",
+					cena: 22.0,
+					kategoria: "Mięso",
+					opis: "(15 chrupiących nuggetsów z kurczaka)",
+				},
+				{
+					id: "28",
+					nazwa: "Wings-box",
+					cena: 21.0,
+					kategoria: "Mięso",
+					opis: "(8 pikantnych skrzydełek, sos blue cheese)",
+				},
+
+				// NAPOJE - NOWE I STARE (29 - 61)
+				{
+					id: "29",
+					nazwa: "Nielimitowana dolewka",
+					cena: 11.0,
+					kategoria: "Napoje",
+					opis: "(dowolna ilość z dystrybutora)",
+				},
+				{
+					id: "54",
+					nazwa: "Cola",
+					cena: 10.0,
+					kategoria: "Napoje",
+					opis: "(250ml klasyczna Coca-Cola)",
+				},
+				{
+					id: "55",
+					nazwa: "Cola Zero",
+					cena: 10.0,
+					kategoria: "Napoje",
+					opis: "(250ml Coca-Cola bez cukru)",
+				},
+				{
+					id: "56",
+					nazwa: "Pepsi",
+					cena: 10.0,
+					kategoria: "Napoje",
+					opis: "(250ml klasyczna Pepsi)",
+				},
+				{
+					id: "57",
+					nazwa: "Pepsi Zero",
+					cena: 10.0,
+					kategoria: "Napoje",
+					opis: "(250ml Pepsi Max)",
+				},
+				{
+					id: "58",
+					nazwa: "Mirinda",
+					cena: 10.0,
+					kategoria: "Napoje",
+					opis: "(250ml napój pomarańczowy)",
+				},
+				{
+					id: "59",
+					nazwa: "Sprite",
+					cena: 10.0,
+					kategoria: "Napoje",
+					opis: "(250ml napój cytrynowy)",
+				},
+				{
+					id: "60",
+					nazwa: "Lipton Zielony",
+					cena: 10.0,
+					kategoria: "Napoje",
+					opis: "(Ice Tea Green Tea)",
+				},
+				{
+					id: "61",
+					nazwa: "Lipton Niebieski",
+					cena: 10.0,
+					kategoria: "Napoje",
+					opis: "(Ice Tea Peach/Blue)",
+				},
+				{
+					id: "30",
+					nazwa: "Sweettea",
+					cena: 10.0,
+					kategoria: "Napoje",
+					opis: "(mrożona herbata słodzona)",
+				},
+				{
+					id: "32",
+					nazwa: "Shake chocolate",
+					cena: 14.0,
+					kategoria: "Napoje",
+					opis: "(klasyczny szejk czekoladowy)",
+				},
+				{
+					id: "33",
+					nazwa: "Vanilla-shake",
+					cena: 14.0,
+					kategoria: "Napoje",
+					opis: "(klasyczny szejk waniliowy)",
+				},
+				{
+					id: "34",
+					nazwa: "Strawberry-shake",
+					cena: 14.0,
+					kategoria: "Napoje",
+					opis: "(klasyczny szejk truskawkowy)",
+				},
+				{
+					id: "35",
+					nazwa: "Fresh-lemonade",
+					cena: 13.0,
+					kategoria: "Napoje",
+					opis: "(cytrynowa lemoniada z lodem)",
+				},
+				{
+					id: "36",
+					nazwa: "Kawa czarna",
+					cena: 10.0,
+					kategoria: "Napoje",
+					opis: "(Klasyczna czarna kawa)",
+				},
+				{
+					id: "43",
+					nazwa: "Latte",
+					cena: 10.0,
+					kategoria: "Napoje",
+					opis: "(Kawa Latte z ciasteczkiem)",
+				},
+
+				// ALKOHOL (44 - 47)
+				{
+					id: "44",
+					nazwa: "Piwo Jasne (500ml)",
+					cena: 35.0,
+					kategoria: "Alkohol",
+					opis: "(klasyczny polski lager)",
+				},
+				{
+					id: "45",
+					nazwa: "Piwo Kraftowe (500ml)",
+					cena: 39.0,
+					kategoria: "Alkohol",
+					opis: "(lokalne IPA lub APA)",
+				},
+				{
+					id: "46",
+					nazwa: "Wino domowe (150ml)",
+					cena: 45.0,
+					kategoria: "Alkohol",
+					opis: "(białe lub czerwone wytrawne)",
+				},
+				{
+					id: "47",
+					nazwa: "Cydr (400ml)",
+					cena: 43.0,
+					kategoria: "Alkohol",
+					opis: "(orzeźwiający cydr jabłkowy)",
+				},
+
+				// SOSY (48 - 53)
+				{
+					id: "48",
+					nazwa: "Sos czosnkowy",
+					cena: 5.0,
+					kategoria: "Sosy",
+					opis: "",
+				},
+				{
+					id: "49",
+					nazwa: "Ketchup",
+					cena: 0.0,
+					kategoria: "Sosy",
+					opis: "",
+				},
+				{
+					id: "50",
+					nazwa: "Sos majonezowy",
+					cena: 5.0,
+					kategoria: "Sosy",
+					opis: "",
+				},
+				{
+					id: "51",
+					nazwa: "Sos BBQ",
+					cena: 5.0,
+					kategoria: "Sosy",
+					opis: "",
+				},
+				{
+					id: "52",
+					nazwa: "Sos jalapeno",
+					cena: 5.0,
+					kategoria: "Sosy",
+					opis: "",
+				},
+				{
+					id: "53",
+					nazwa: "Sos do burgerów",
+					cena: 5.0,
+					kategoria: "Sosy",
+					opis: "",
+				},
+			];
+
+			let zamowienie = [];
+			let aktywnaKategoria = "Wszystko";
+			let historiaZamowien =
+				JSON.parse(localStorage.getItem("orderHistory")) || [];
+			let personel = JSON.parse(localStorage.getItem("staffData")) || {
+				boss: { imie: "Szef Town" },
+				employees: [{ imie: "Kasjer 1" }, { imie: "Kasjer 2" }],
+			};
+			let kody = JSON.parse(localStorage.getItem("discountCodes")) || [];
+			let klienciLojalnosciowi =
+				JSON.parse(localStorage.getItem("loyaltyClients")) || [];
+			let promocjeLojalnosciowe =
+				JSON.parse(localStorage.getItem("loyaltyPromos")) || [];
+			let aktywnyKlientLojalnosciowy = null;
+			let aktywnaPromocjaLojalnosciowa = null;
+
+			const WALUTA = "";
+			const CENA_AKTYWACJI_LOJALNOSCI = 10.0;
+			const OPLATA_OPAKOWANIE = 1.0;
+			const OPLATA_DOSTAWA = 15.0;
+			const PUNKT_WARTOSC = 0.25;
+			const RABAT_ZESTAW = 10.0;
+
+			function zapiszWszystko() {
+				localStorage.setItem(
+					"orderHistory",
+					JSON.stringify(historiaZamowien)
+				);
+				localStorage.setItem("staffData", JSON.stringify(personel));
+				localStorage.setItem("discountCodes", JSON.stringify(kody));
+				localStorage.setItem(
+					"loyaltyClients",
+					JSON.stringify(klienciLojalnosciowi)
+				);
+				localStorage.setItem(
+					"loyaltyPromos",
+					JSON.stringify(promocjeLojalnosciowe)
+				);
+			}
+
+			function init() {
+				setupTabSwitching();
+				renderujKategorie();
+				renderujMenu();
+				aktualizujListeOsob();
+				renderujHistorieZamowien();
+				renderujPersonel();
+				renderujListeKodow();
+				renderujListeKodowDropdown();
+				renderujKlientowLojalnosciowych();
+				renderujPromocjeLojalnosciowe();
+				setupPromoListeners();
+				aktualizujListeKlientowDatalist();
+
+				document
+					.getElementById("orderType")
+					.addEventListener("change", () => {
+						przelaczPolaDostawy();
+						aktualizujListeZamowienia();
+					});
+
+				// Usunięto generujStatystyki();
+			}
+
+			function wczytajZlanyKod() {
+				const wielkiKod = prompt("Wpisz ciąg cyfr od klienta:");
+				if (!wielkiKod || wielkiKod.length % 2 !== 0) {
+					alert("Błędny kod! Musi mieć parzystą liczbę cyfr.");
+					return;
+				}
+
+				// Tnie ciąg co 2 znaki (np. "010522" -> "01", "05", "22")
+				const wycieteID = wielkiKod.match(/.{1,2}/g);
+
+				wycieteID.forEach((productId) => {
+					const index = menu.findIndex((m) => m.id == productId);
+					if (index !== -1) {
+						dodajDoZamowienia(index); // Używa Twojej funkcji dodawania do listy
+					}
+				});
+			}
+
+			function setupTabSwitching() {
+				document.querySelectorAll(".tab-btn").forEach((button) => {
+					button.addEventListener("click", () => {
+						document
+							.querySelectorAll(".tab")
+							.forEach((t) => t.classList.remove("active"));
+						document
+							.querySelectorAll(".tab-btn")
+							.forEach((b) => b.classList.remove("active"));
+
+						const tabId = button.dataset.tab;
+						document.getElementById(tabId).classList.add("active");
+
+						button.classList.add("active");
+
+						// Usunięto warunek dla 'statsTab'
+						if (tabId === "historyTab") renderujHistorieZamowien();
+						if (tabId === "staffTab") renderujPersonel();
+						if (tabId === "codesTab") {
+							renderujListeKodow();
+							renderujListeKodowDropdown();
+						}
+						if (tabId === "loyaltyTab") {
+							renderujKlientowLojalnosciowych();
+							renderujPromocjeLojalnosciowe();
+							wypelnijProduktyDlaPromocji();
+						}
+					});
+				});
+			}
+
+			function przelaczPolaDostawy() {
+				const typ = document.getElementById("orderType").value;
+				const polaDostawy = document.getElementById("deliveryFields");
+				polaDostawy.style.display =
+					typ === "dostawa" ? "block" : "none";
+			}
+
+			function renderujKategorie() {
+				const categoriesDiv = document.getElementById("menuCategories");
+				categoriesDiv.innerHTML = "";
+
+				const uniqueCategories = new Set(
+					menu.map((item) => item.kategoria)
+				);
+				const categories = [
+					"Wszystko",
+					...Array.from(uniqueCategories).sort(),
+				];
+
+				categories.forEach((cat) => {
+					const button = document.createElement("button");
+					button.textContent = cat;
+					button.className = cat === aktywnaKategoria ? "active" : "";
+					button.onclick = () => {
+						aktywnaKategoria = cat;
+						document.getElementById("menuSearch").value = "";
+						renderujKategorie();
+						renderujMenu();
+					};
+					categoriesDiv.appendChild(button);
+				});
+			}
+
+			function renderujMenu() {
+				const listaMenu = document.getElementById("menuList");
+				listaMenu.innerHTML = "";
+
+				const searchText = document
+					.getElementById("menuSearch")
+					.value.toLowerCase();
+
+				const filteredMenu = menu.filter((m) => {
+					const kategoriaMatch =
+						aktywnaKategoria === "Wszystko" ||
+						m.kategoria === aktywnaKategoria;
+					const searchMatch = m.nazwa
+						.toLowerCase()
+						.includes(searchText);
+					return kategoriaMatch && searchMatch;
+				});
+
+				const menuByKategoria = filteredMenu.reduce((acc, item) => {
+					const kategoria = item.kategoria || "Inne";
+					if (!acc[kategoria]) acc[kategoria] = [];
+					acc[kategoria].push(item);
+					return acc;
+				}, {});
+
+				let kategorieDoWyswietlenia =
+					Object.keys(menuByKategoria).sort();
+				if (
+					aktywnaKategoria !== "Wszystko" &&
+					menuByKategoria[aktywnaKategoria]
+				) {
+					kategorieDoWyswietlenia = [aktywnaKategoria];
+				} else if (searchText !== "") {
+					kategorieDoWyswietlenia =
+						Object.keys(menuByKategoria).sort();
+				}
+
+				kategorieDoWyswietlenia.forEach((kategoria) => {
+					const items = menuByKategoria[kategoria];
+					if (!items || items.length === 0) return;
+
+					const title = document.createElement("h3");
+					title.textContent = kategoria;
+					title.className = "section-title menu-category-title";
+					listaMenu.appendChild(title);
+
+					items.forEach((m) => {
+						const indeks = menu.findIndex(
+							(item) =>
+								item.nazwa === m.nazwa && item.cena === m.cena
+						);
+						if (indeks === -1) return;
+
+						const wiersz = document.createElement("div");
+						wiersz.className = "item";
+						wiersz.innerHTML = `
+				<div>
+					<strong>${m.nazwa}</strong> — ${m.cena.toFixed(2)} ${WALUTA}
+					<div style="font-size: 0.8em; color: #777;">${
+						m.opis || ""
+					}</div>
+				</div>
+				<button class="add" onclick="dodajDoZamowienia(${indeks})">Dodaj</button>`;
+						listaMenu.appendChild(wiersz);
+					});
+				});
+			}
+
+			let tempIndex = null; // Zmienna pomocnicza do zapamiętania produktu
+			let tempHistoryIndex = null; // pomocnicza do kopiowania z historii (jeśli jest alkohol)
+
+			function toggleZestawyInfo() {
+				const el = document.getElementById("zestawyInfo");
+				el.style.display =
+					el.style.display === "none" ? "block" : "none";
+			}
+
+			function dodajDoZamowienia(indeks) {
+				const m = menu[indeks];
+				const typ = document.getElementById("orderType").value;
+
+				// 1. Blokada dla opcji "Samochód"
+				if (typ === "samochod" && m.kategoria === "Alkohol") {
+					alert("BŁĄD: Nie można zamawiać alkoholu do samochodu!");
+					return;
+				}
+
+				// 2. Weryfikacja wieku dla alkoholu
+				if (m.kategoria === "Alkohol") {
+					tempIndex = indeks;
+					document.getElementById("ageModal").style.display = "block";
+					document.getElementById("ageInfo").innerText = "";
+					return;
+				}
+
+				wykonajDodawanie(indeks);
+			}
+
+			function kopiujZHistorii(index) {
+				// Kopiuje wszystkie pozycje z zamówienia w historii do aktualnego zamówienia.
+				const order = historiaZamowien[index];
+				if (!order) return alert('Nie znaleziono zamówienia w historii.');
+				// wyczyść pole klienta
+				document.getElementById('orderClient').value = '';
+
+				// jeśli w zamówieniu są pozycje alkoholowe -> najpierw sprawdź wiek
+				const hasAlcohol = (order.przedmioty || []).some(p => {
+					const m = menu.find(mm => mm.nazwa === p.nazwa);
+					return m && m.kategoria === 'Alkohol';
+				});
+				if (hasAlcohol) {
+					tempHistoryIndex = index;
+					document.getElementById('ageModal').style.display = 'block';
+					document.getElementById('ageInfo').innerText = '';
+					return;
+				}
+				wykonajKopiujHistorii(index);
+			}
+
+
+			function wykonajKopiujHistorii(index) {
+				const order = historiaZamowien[index];
+				if (!order) return;
+				(order.przedmioty || []).forEach(item => {
+					// spróbuj odnaleźć produkt w menu
+					const mi = menu.findIndex(m => m.nazwa === item.nazwa);
+					if (mi !== -1) {
+						// dodaj tyle sztuk ile w historii
+						const existing = zamowienie.find(z => z.nazwa === menu[mi].nazwa && z.niestandardowy !== true && z.promocjaLojalnosciowa !== true);
+						if (existing) existing.ilosc += item.ilosc || 1;
+						else zamowienie.push({ nazwa: menu[mi].nazwa, cena: menu[mi].cena, ilosc: item.ilosc || 1 });
+					} else {
+						// niestandardowa pozycja z historii - dodaj jako niestandardowa
+						zamowienie.push({ nazwa: item.nazwa, cena: item.cena || 0, ilosc: item.ilosc || 1, niestandardowy: true });
+					}
+				});
+				aktualizujListeZamowienia();
+			}
+
+			function potwierdzWiek() {
+				const dataUr = new Date(
+					document.getElementById("birthDateInput").value
+				);
+				if (isNaN(dataUr)) return alert("Wybierz datę!");
+
+				const dzis = new Date();
+				let wiek = dzis.getFullYear() - dataUr.getFullYear();
+				const m = dzis.getMonth() - dataUr.getMonth();
+				if (m < 0 || (m === 0 && dzis.getDate() < dataUr.getDate()))
+					wiek--;
+
+				const info = document.getElementById("ageInfo");
+				info.innerText = "Klient ma: " + wiek + " lat";
+
+				if (wiek >= 18) {
+					info.style.color = "var(--green)";
+					setTimeout(() => {
+						if (tempIndex !== null) {
+							wykonajDodawanie(tempIndex);
+							tempIndex = null;
+						} else if (tempHistoryIndex !== null) {
+							wykonajKopiujHistorii(tempHistoryIndex);
+							tempHistoryIndex = null;
+						}
+						document.getElementById("ageModal").style.display =
+							"none";
+					}, 1000);
+				} else {
+					info.style.color = "var(--red)";
+					alert("KLIENT NIEPEŁNOLETNI! Sprzedaż zabroniona.");
+					document.getElementById("ageModal").style.display = "none";
+				}
+			}
+
+			// Oryginalna logika dodawania wyciągnięta do osobnej funkcji
+			function wykonajDodawanie(indeks) {
+				const m = menu[indeks];
+				const istniejacy = zamowienie.find(
+					(it) =>
+						it.nazwa === m.nazwa &&
+						it.niestandardowy !== true &&
+						it.promocjaLojalnosciowa !== true
+				);
+				if (istniejacy) istniejacy.ilosc++;
+				else
+					zamowienie.push({ nazwa: m.nazwa, cena: m.cena, ilosc: 1 });
+				aktualizujListeZamowienia();
+			}
+
+			function dodajPozycjeNiestandardowa() {
+				const nazwa = document
+					.getElementById("customItemName")
+					.value.trim();
+				const cenaStr = document
+					.getElementById("customItemPrice")
+					.value.trim();
+				const cena = parseFloat(cenaStr);
+
+				if (!nazwa)
+					return alert("Podaj nazwę produktu niestandardowego.");
+				if (isNaN(cena) || cena <= 0)
+					return alert(
+						"Podaj poprawną cenę produktu niestandardowego."
+					);
+
+				zamowienie.push({
+					nazwa: `[Niestandardowa] ${nawa}`,
+					cena: cena,
+					ilosc: 1,
+					niestandardowy: true,
+				});
+
+				document.getElementById("customItemName").value = "";
+				document.getElementById("customItemPrice").value = "";
+
+				aktualizujListeZamowienia();
+			}
+
+			function aktualizujIlosc(i, val) {
+				const q = parseInt(val);
+				if (!isNaN(q) && q > 0) {
+					zamowienie[i].ilosc = q;
+					aktualizujListeZamowienia();
+				}
+			}
+			function usunZZamowienia(i) {
+				zamowienie.splice(i, 1);
+				if (
+					aktywnaPromocjaLojalnosciowa &&
+					zamowienie.findIndex(
+						(item) => item.promocjaLojalnosciowa
+					) === -1
+				) {
+					aktywnaPromocjaLojalnosciowa = null;
+				}
+				aktualizujListeZamowienia();
+			}
+
+			function pobierzSumePodstawowa() {
+				return zamowienie.reduce((s, it) => s + it.cena * it.ilosc, 0);
+			}
+
+			function wyczyscZamowienie() {
+				zamowienie = [];
+				document.getElementById("orderClient").value = "";
+				document.getElementById("appliedCode").value = "";
+				document.getElementById("deliveryCity").value = "";
+				document.getElementById("deliveryStreet").value = "";
+				document.getElementById("deliveryNumber").value = "";
+				aktywnyKlientLojalnosciowy = null;
+				aktywnaPromocjaLojalnosciowa = null;
+				document.getElementById("pointsToUse").value = 0;
+
+				aktualizujListeZamowienia();
+			}
+
+			function aktualizujListeZamowienia() {
+				const lista = document.getElementById("orderList");
+				let sumaPodstawowa = pobierzSumePodstawowa();
+
+				lista.innerHTML = "";
+
+				// Dodanie opłaty aktywacyjnej, jeśli dotyczy
+				if (
+					aktywnyKlientLojalnosciowy &&
+					!aktywnyKlientLojalnosciowy.aktywny
+				) {
+					const oplataAktywacyjna = zamowienie.find(
+						(item) =>
+							item.nazwa ===
+							`Opłata Aktywacyjna Lojalność (${CENA_AKTYWACJI_LOJALNOSCI.toFixed(
+								2
+							)} ${WALUTA})` && item.clientName === aktywnyKlientLojalnosciowy.nazwa
+					);
+					if (!oplataAktywacyjna) {
+						zamowienie.push({
+							nazwa: `Opłata Aktywacyjna Lojalność (${CENA_AKTYWACJI_LOJALNOSCI.toFixed(
+								2
+							)} ${WALUTA})`,
+							cena: CENA_AKTYWACJI_LOJALNOSCI,
+							ilosc: 1,
+							jestOpłataAktywacyjna: true,
+							czyLojalnosc: true,
+							clientName: aktywnyKlientLojalnosciowy.nazwa,
+						});
+						sumaPodstawowa += CENA_AKTYWACJI_LOJALNOSCI;
+					}
+				} else {
+					// Usuń opłatę, jeśli nie ma przypisanego klienta
+					if (!aktywnyKlientLojalnosciowy) {
+						zamowienie = zamowienie.filter(
+							(item) => !item.jestOpłataAktywacyjna
+						);
+					} else {
+						// zachowaj opłatę tylko jeśli należy do aktualnie przypisanego klienta
+						zamowienie = zamowienie.filter(
+							(item) => !item.jestOpłataAktywacyjna || item.clientName === aktywnyKlientLojalnosciowy.nazwa
+						);
+					}
+				}
+
+				if (zamowienie.length === 0) {
+					lista.innerHTML =
+						'<li style="padding: 10px 0;">Brak pozycji</li>';
+					document.getElementById("totalPrice").textContent = `0.00`;
+					document.getElementById(
+						"loyaltyPointsDisplay"
+					).style.display = "none";
+					return;
+				}
+
+				zamowienie.forEach((it, i) => {
+					const li = document.createElement("li");
+					li.className = "item";
+					li.style.borderBottom = "1px dashed #eee";
+
+					const nazwa = it.promocjaLojalnosciowa
+						? `[GRATIS] ${it.nazwa}`
+						: it.nazwa;
+
+					li.innerHTML = `
+            <div style="flex-grow: 1; color: ${
+				it.promocjaLojalnosciowa ? "var(--green)" : "inherit"
+			};">
+                ${nazwa} (${it.cena.toFixed(2)} ${WALUTA})
+            </div>
+            ${
+				it.jestOpłataAktywacyjna || it.promocjaLojalnosciowa
+					? `<strong style="margin-left: 5px; width: 60px; text-align: right;">${(
+							it.cena * it.ilosc
+					  ).toFixed(2)} ${WALUTA}</strong>`
+					: `<input class="small-qty" type="number" min="1" value="${
+							it.ilosc
+					  }" onchange="aktualizujIlosc(${i}, this.value)">
+            <strong style="margin-left: 5px; width: 60px; text-align: right;">${(
+				it.cena * it.ilosc
+			).toFixed(2)} ${WALUTA}</strong>`
+			}
+            <button class="remove" onclick="usunZZamowienia(${i})">X</button>`;
+					lista.appendChild(li);
+				});
+
+				const typ = document.getElementById("orderType").value;
+				const calkowitaIlosc = zamowienie
+					.filter((item) => !item.jestOpłataAktywacyjna)
+					.reduce((s, i) => s + i.ilosc, 0);
+				const oplataOpakowanie =
+					typ === "na wynos" ||
+					typ === "samochod" ||
+					typ === "dostawa"
+						? calkowitaIlosc * OPLATA_OPAKOWANIE
+						: 0;
+				const oplataDostawa = typ === "dostawa" ? OPLATA_DOSTAWA : 0;
+				let sumaDoRabatowania =
+					sumaPodstawowa + oplataOpakowanie + oplataDostawa;
+
+				// RABAT ZESTAWOWY (wielokrotny)
+				const iloscZestawow = policzZestawy();
+				let rabatZestawowy = iloscZestawow * RABAT_ZESTAW;
+
+				// Wyświetlanie informacji o zestawach
+				const zestawyInfo = document.getElementById("zestawyInfo");
+				if (iloscZestawow > 0) {
+					zestawyInfo.innerHTML = `
+			<strong>Zestaw${iloscZestawow > 1 ? "y" : ""}:</strong><br>
+			${iloscZestawow}x (Burger/Wrap + Frytki + Napój) = <strong>–${rabatZestawowy.toFixed(
+						2
+					)} USD</strong>
+		`;
+					zestawyInfo.style.display = "block";
+				} else {
+					zestawyInfo.style.display = "none";
+				}
+
+				if (rabatZestawowy > 0) {
+					rabatZestawowy = Math.min(
+						rabatZestawowy,
+						sumaDoRabatowania
+					);
+					sumaDoRabatowania -= rabatZestawowy;
+				}
+
+				// RABAT ZA PARY BURGERÓW/WRAPÓW (10 USD za każdą parę, pomijamy burgery w zestawach)
+				let rabatPar = policzRabatPar();
+				if (!isFinite(rabatPar) || rabatPar < 0) rabatPar = 0;
+				rabatPar = Math.min(rabatPar, sumaDoRabatowania);
+				sumaDoRabatowania -= rabatPar;
+
+				// Wyświetlanie informacji o parach
+				const paryInfo = document.getElementById("paryInfo");
+				if (rabatPar > 0) {
+					paryInfo.innerHTML = `<strong>Rabat za pary burgerów/wrapów:</strong><br>–${rabatPar.toFixed(2)} USD`;
+					paryInfo.style.display = "block";
+				} else {
+					paryInfo.style.display = "none";
+				}
+
+				// RABAT LOJALNOŚCIOWY (punkty)
+				const punktyDoUzycia =
+					parseInt(document.getElementById("pointsToUse").value) || 0;
+				let rabatLojalnosciowy = 0;
+
+				if (aktywnyKlientLojalnosciowy && punktyDoUzycia > 0) {
+					const maxPunkty = aktywnyKlientLojalnosciowy.punkty || 0;
+					const punktyFinalne = Math.min(punktyDoUzycia, maxPunkty);
+					rabatLojalnosciowy = punktyFinalne * PUNKT_WARTOSC;
+
+					// Rabat nie może przekroczyć sumy
+					rabatLojalnosciowy = Math.min(
+						rabatLojalnosciowy,
+						sumaDoRabatowania
+					);
+					sumaDoRabatowania -= rabatLojalnosciowy;
+				}
+
+				// RABAT KODU
+				const uzytyKod = document.getElementById("appliedCode").value;
+				let rabatKod = 0;
+				const obiektKodu = kody.find(
+					(c) => c.kod === uzytyKod && c.status === "aktywny"
+				);
+				if (obiektKodu) {
+					if (obiektKodu.typ === "%") {
+						const perc = Number(obiektKodu.wartosc) || 0;
+						rabatKod =
+							sumaDoRabatowania > 0
+								? sumaDoRabatowania * (perc / 100)
+								: 0;
+					} else {
+						const wartoscUsd = Number(obiektKodu.wartosc) || 0;
+						if (obiektKodu.mode === "per_use") {
+							rabatKod = Math.min(wartoscUsd, sumaDoRabatowania);
+						} else {
+							const pozostala =
+								Number(obiektKodu.pozostala ?? wartoscUsd) || 0;
+							rabatKod = Math.min(pozostala, sumaDoRabatowania);
+						}
+					}
+				}
+				// zabezpieczenie
+				if (!isFinite(rabatKod) || rabatKod < 0) rabatKod = 0;
+				rabatKod = Math.min(rabatKod, Math.max(0, sumaDoRabatowania));
+
+				let sumaPoRabacie = sumaDoRabatowania - rabatKod;
+				if (!isFinite(sumaPoRabacie) || sumaPoRabacie < 0) sumaPoRabacie = 0;
+
+				const calkowita = sumaPoRabacie;
+				// zaokrąglamy ostateczną cenę do góry do pełnych USD
+				const calkowitaRounded = Math.ceil(calkowita);
+
+				const spanCena = document.getElementById("totalPrice");
+				spanCena.textContent = `${calkowitaRounded.toFixed(2)} ${WALUTA}`;
+
+				let rabatText = "";
+				if (rabatZestawowy > 0)
+					rabatText += ` Zestaw: -${rabatZestawowy.toFixed(
+						2
+					)} ${WALUTA}.`;
+				if (rabatPar > 0)
+					rabatText += ` Pary: -${rabatPar.toFixed(2)} ${WALUTA}.`;
+				if (rabatLojalnosciowy > 0)
+					rabatText += ` Punkty: -${rabatLojalnosciowy.toFixed(
+						2
+					)} ${WALUTA}.`;
+				if (rabatKod > 0)
+					rabatText += ` Kod: -${rabatKod.toFixed(2)} ${WALUTA}.`;
+
+				if (rabatText) spanCena.textContent += ` (rabat: ${rabatText.trim()})`;
+
+				// Aktywacja/dezaktywacja sekcji lojalności
+				document.getElementById("loyaltyPointsDisplay").style.display =
+					aktywnyKlientLojalnosciowy ? "block" : "none";
+				if (aktywnyKlientLojalnosciowy) aktualizujWyswietlaniePunktow();
+			}
+
+			function uzyjMaxPunktow() {
+				if (!aktywnyKlientLojalnosciowy) return;
+
+				const punkty = aktywnyKlientLojalnosciowy.punkty || 0;
+				let maxRabat = punkty * PUNKT_WARTOSC;
+
+				let sumaPodstawowa = pobierzSumePodstawowa();
+				const typ = document.getElementById("orderType").value;
+				const calkowitaIlosc = zamowienie
+					.filter((item) => !item.jestOpłataAktywacyjna)
+					.reduce((s, i) => s + i.ilosc, 0);
+				const oplataOpakowanie =
+					typ === "na wynos" || typ === "dostawa"
+						? calkowitaIlosc * OPLATA_OPAKOWANIE
+						: 0;
+				const oplataDostawa = typ === "dostawa" ? OPLATA_DOSTAWA : 0;
+				let sumaDoRabatowania =
+					sumaPodstawowa + oplataOpakowanie + oplataDostawa;
+
+				// Uwzględnij rabat za pary przed liczeniem maksymalnego rabatu z punktów
+				const rabatPar = policzRabatPar();
+				let sumaDoRabatowaniaTemp = sumaDoRabatowania - (isFinite(rabatPar) && rabatPar > 0 ? rabatPar : 0);
+				if (sumaDoRabatowaniaTemp < 0) sumaDoRabatowaniaTemp = 0;
+				// Rabat z punktów nie może przekroczyć sumy zamówienia po rabatach
+				maxRabat = Math.min(maxRabat, sumaDoRabatowaniaTemp);
+
+				const punktyDoUzycia = Math.floor(maxRabat / PUNKT_WARTOSC);
+
+				document.getElementById("pointsToUse").value = punktyDoUzycia;
+				aktualizujListeZamowienia();
+			}
+
+			function finalizujZamowienie() {
+				const pracownik = document.getElementById("orderPerson").value;
+				if (!pracownik)
+					return alert(
+						"Wybierz pracownika przyjmującego zamówienie!"
+					);
+				if (zamowienie.length === 0)
+					return alert("Zamówienie jest puste! Dodaj produkty.");
+
+				const typ = document.getElementById("orderType").value;
+				const klientWpisany =
+					document.getElementById("orderClient").value || "Anonim";
+				let szczegolyDostawy = null;
+				if (typ === "dostawa") {
+					szczegolyDostawy = {
+						miasto: document.getElementById("deliveryCity").value,
+						ulica: document.getElementById("deliveryStreet").value,
+						uwagi: document.getElementById("deliveryNumber").value,
+					};
+					if (!szczegolyDostawy.ulica || !szczegolyDostawy.miasto)
+						return alert("Wypełnij pola dostawy (miasto i ulica)!");
+				}
+
+				const sumaPodstawowa = pobierzSumePodstawowa();
+				const calkowitaIlosc = zamowienie
+					.filter((i) => !i.jestOpłataAktywacyjna)
+					.reduce((s, i) => s + i.ilosc, 0);
+				const oplataOpakowanie =
+					typ === "na wynos" || typ === "dostawa"
+						? calkowitaIlosc * OPLATA_OPAKOWANIE
+						: 0;
+				const oplataDostawa = typ === "dostawa" ? OPLATA_DOSTAWA : 0;
+
+				let sumaDoRabatowania =
+					sumaPodstawowa + oplataOpakowanie + oplataDostawa;
+
+				// Odejmij rabat za pary burgerów/wrapów (przed dalszymi rabatami)
+				let rabatPar = policzRabatPar();
+				if (!isFinite(rabatPar) || rabatPar < 0) rabatPar = 0;
+				rabatPar = Math.min(rabatPar, sumaDoRabatowania);
+				sumaDoRabatowania -= rabatPar;
+
+				// punkty lojalnościowe
+				let rabatLojalnosciowy = 0;
+				let punktyZuzyte = 0;
+				const punktyDoUzycia =
+					parseInt(document.getElementById("pointsToUse").value) || 0;
+				if (aktywnyKlientLojalnosciowy && punktyDoUzycia > 0) {
+					const maxPunkty = aktywnyKlientLojalnosciowy.punkty || 0;
+					punktyZuzyte = Math.min(punktyDoUzycia, maxPunkty);
+					rabatLojalnosciowy = punktyZuzyte * PUNKT_WARTOSC;
+					rabatLojalnosciowy = Math.min(
+						rabatLojalnosciowy,
+						sumaDoRabatowania
+					);
+					sumaDoRabatowania -= rabatLojalnosciowy;
+					punktyZuzyte = Math.floor(
+						rabatLojalnosciowy / PUNKT_WARTOSC
+					);
+				}
+
+				// kod rabatowy
+				const uzytyKod = document.getElementById("appliedCode").value;
+				let rabatKod = 0;
+				let kodRabatowyInfo = uzytyKod || null;
+				const obiektKodu = kody.find(
+					(c) => c.kod === uzytyKod && c.status === "aktywny"
+				);
+
+				if (obiektKodu) {
+					if (obiektKodu.typ === "%") {
+						rabatKod =
+							sumaDoRabatowania * (obiektKodu.wartosc / 100);
+						// zliczamy użycie procentowego kodu jeśli ma limit
+						if (obiektKodu.maxUse) {
+							obiektKodu.usedCount =
+								(obiektKodu.usedCount || 0) + 1;
+							if (obiektKodu.usedCount >= obiektKodu.maxUse)
+								obiektKodu.status = "wykorzystany";
+						}
+					} else {
+						// usd
+						if (obiektKodu.mode === "per_use") {
+							rabatKod = Math.min(
+								obiektKodu.wartosc,
+								sumaDoRabatowania
+							);
+							obiektKodu.usedCount =
+								(obiektKodu.usedCount || 0) + 1;
+							if (
+								obiektKodu.maxUse &&
+								obiektKodu.usedCount >= obiektKodu.maxUse
+							)
+								obiektKodu.status = "wykorzystany";
+						} else {
+							// one_time (pulowy)
+							const pozostala =
+								obiektKodu.pozostala ?? obiektKodu.wartosc;
+							rabatKod = Math.min(pozostala, sumaDoRabatowania);
+							obiektKodu.pozostala =
+								(obiektKodu.pozostala ?? obiektKodu.wartosc) -
+								rabatKod;
+							if (obiektKodu.pozostala <= 0)
+								obiektKodu.status = "wykorzystany";
+							if (obiektKodu.maxUse) {
+								obiektKodu.usedCount =
+									(obiektKodu.usedCount || 0) + 1;
+								if (obiektKodu.usedCount >= obiektKodu.maxUse)
+									obiektKodu.status = "wykorzystany";
+							}
+						}
+					}
+				} else {
+					rabatKod = 0;
+					kodRabatowyInfo = null;
+				}
+
+				// zapisz zmiany w kodach (jeśli powstały)
+				zapiszWszystko();
+
+				let cenaCalkowita = sumaDoRabatowania - rabatKod;
+				if (cenaCalkowita < 0) cenaCalkowita = 0;
+				// zaokrąglamy do góry do pełnych USD
+				cenaCalkowita = Math.ceil(cenaCalkowita);
+				// zaokrąglamy do góry do pełnych USD
+				cenaCalkowita = Math.ceil(cenaCalkowita);
+
+				// punkty naliczone - prosty, bezbłędny sposób
+				let punktyNaliczone = 0;
+				if (aktywnyKlientLojalnosciowy) {
+					if (!aktywnyKlientLojalnosciowy.aktywny) {
+						aktywnyKlientLojalnosciowy.aktywny = true;
+						alert(
+							`Klient ${klientWpisany} aktywowany w programie lojalnościowym. Opłata ${CENA_AKTYWACJI_LOJALNOSCI.toFixed(
+								2
+							)} ${WALUTA} doliczona.`
+						);
+					}
+					punktyNaliczone = Math.floor(cenaCalkowita / 2);
+					aktywnyKlientLojalnosciowy.punkty =
+						(aktywnyKlientLojalnosciowy.punkty || 0) +
+						punktyNaliczone -
+						punktyZuzyte;
+					if (aktywnaPromocjaLojalnosciowa) {
+						aktywnyKlientLojalnosciowy.punkty -=
+							aktywnaPromocjaLojalnosciowa.wymaganePunkty;
+					}
+				}
+
+				const noweZamowienie = {
+					id: Date.now(),
+					data: new Date().toISOString(),
+					pracownik: pracownik,
+					klient: klientWpisany,
+					typ: typ,
+					szczegolyDostawy: szczegolyDostawy,
+					przedmioty: [...zamowienie],
+					sumaPodstawowa: sumaPodstawowa,
+					oplataOpakowanie: oplataOpakowanie,
+					oplataDostawa: oplataDostawa,
+					kodRabatowy: kodRabatowyInfo,
+					rabatKod: rabatKod,
+					rabatLojalnosc: rabatLojalnosciowy,
+					punktyZuzyte: punktyZuzyte,
+					punktyNaliczone: punktyNaliczone,
+					promocjaLojalnosc: aktywnaPromocjaLojalnosciowa
+						? aktywnaPromocjaLojalnosciowa.nazwa
+						: null,
+					cenaCalkowita: cenaCalkowita,
+				};
+
+				historiaZamowien.push(noweZamowienie);
+				zapiszWszystko();
+				wyczyscZamowienie();
+				renderujHistorieZamowien();
+				renderujListeKodow();
+				renderujListeKodowDropdown();
+				alert("Zamówienie zostało złożone pomyślnie!");
+			}
+
+			// --- FUNKCJE LOJALNOŚCIOWE ---
+
+			function dodajKlientaLojalnosciowego() {
+				const nameInput = document.getElementById(
+					"newLoyaltyClientName"
+				);
+				const name = nameInput.value.trim();
+
+				if (!name) return alert("Podaj imię i nazwisko klienta.");
+
+				if (klienciLojalnosciowi.some((c) => c.nazwa === name)) {
+					return alert(
+						"Klient o takim imieniu i nazwisku już istnieje."
+					);
+				}
+
+				const nowyKlient = {
+					nazwa: name,
+					punkty: 0,
+					aktywny: false,
+				};
+
+				klienciLojalnosciowi.push(nowyKlient);
+				nameInput.value = "";
+
+				zapiszWszystko();
+				renderujKlientowLojalnosciowych();
+				aktualizujListeKlientowDatalist();
+
+				// Automatyczne przypisanie nowego klienta i doliczenie opłaty aktywacyjnej
+				document.getElementById("orderClient").value = name;
+				przypiszKlientaLojalnosciowego();
+
+				alert(
+					`Klient ${name} dodany do programu lojalnościowego. Opłata aktywacyjna ${CENA_AKTYWACJI_LOJALNOSCI.toFixed(
+						2
+					)} ${WALUTA} zostanie doliczona do bieżącego zamówienia.`
+				);
+			}
+
+			function aktywujKlienta(index) {
+				const klient = klienciLojalnosciowi[index];
+				if (!klient) return alert('Nie znaleziono klienta.');
+				if (klient.aktywny) return alert('Klient jest już aktywny.');
+
+				// ustaw jako aktywny i przypisz do pola klienta
+				klient.aktywny = true;
+				aktywnyKlientLojalnosciowy = klient;
+				document.getElementById('orderClient').value = klient.nazwa;
+
+				// dodaj opłatę aktywacyjną do bieżącego zamówienia jeśli jeszcze jej nie ma
+				const feeExists = zamowienie.some(it => it.jestOpłataAktywacyjna);
+				if (!feeExists) {
+					zamowienie.push({
+						nazwa: `Opłata Aktywacyjna Lojalność (${CENA_AKTYWACJI_LOJALNOSCI.toFixed(2)} ${WALUTA})`,
+						cena: CENA_AKTYWACJI_LOJALNOSCI,
+						ilosc: 1,
+						jestOpłataAktywacyjna: true,
+						czyLojalnosc: true,
+						clientName: klient.nazwa
+					});
+				}
+
+				zapiszWszystko();
+				renderujKlientowLojalnosciowych();
+				aktualizujListeKlientowDatalist();
+				aktualizujListeZamowienia();
+
+				alert(`Klient ${klient.nazwa} aktywowany. Opłata ${CENA_AKTYWACJI_LOJALNOSCI.toFixed(2)} ${WALUTA} została doliczona do zamówienia.`);
+			}
+
+			function przypiszKlientaLojalnosciowego() {
+				const clientName = document
+					.getElementById("orderClient")
+					.value.trim();
+				const klient = klienciLojalnosciowi.find(
+					(c) => c.nazwa === clientName
+				);
+
+				if (klient) {
+					aktywnyKlientLojalnosciowy = klient;
+					aktualizujWyswietlaniePunktow();
+					document.getElementById(
+						"loyaltyPointsDisplay"
+					).style.display = "block";
+				} else {
+					aktywnyKlientLojalnosciowy = null;
+					document.getElementById(
+						"loyaltyPointsDisplay"
+					).style.display = "none";
+
+					// Wyczyść punkty/promocję, jeśli klient został usunięty lub wpisany ręcznie inny
+					document.getElementById("pointsToUse").value = 0;
+					aktywnaPromocjaLojalnosciowa = null;
+					zamowienie = zamowienie.filter(
+						(item) =>
+							!item.jestOpłataAktywacyjna &&
+							!item.promocjaLojalnosciowa
+					);
+				}
+				aktualizujListeZamowienia();
+			}
+
+			function aktualizujWyswietlaniePunktow() {
+				if (!aktywnyKlientLojalnosciowy) return;
+
+				const infoDiv = document.getElementById("clientPointsInfo");
+				const punkty = aktywnyKlientLojalnosciowy.punkty || 0;
+
+				infoDiv.innerHTML = `Klient: **${aktywnyKlientLojalnosciowy.nazwa}** | Punkty: **${punkty}**`;
+
+				// Renderowanie promocji dla klienta
+				const promoDiv = document.getElementById("loyaltyPromotions");
+				promoDiv.innerHTML = "<h4>Dostępne promocje:</h4>";
+
+				promocjeLojalnosciowe.forEach((promo, i) => {
+					const canAfford = punkty >= promo.wymaganePunkty;
+
+					const promoItem = document.createElement("div");
+					promoItem.style.marginBottom = "5px";
+					promoItem.innerHTML = `
+            <input type="radio" name="loyaltyPromo" id="promo-${i}" value="${i}" 
+                ${!canAfford ? "disabled" : ""}
+                ${
+					aktywnaPromocjaLojalnosciowa &&
+					aktywnaPromocjaLojalnosciowa.nazwa === promo.nazwa
+						? "checked"
+						: ""
+				} 
+                onchange="wybierzPromocjeLojalnosciowa(${i})">
+            <label for="promo-${i}">
+                **${promo.nazwa}** - ${promo.wymaganePunkty} pkt. 
+                <span style="color: ${
+					canAfford ? "var(--green)" : "var(--red)"
+				};">(${canAfford ? "Dostępna" : "Wymaga więcej punktów"})</span>
+            </label>
+        `;
+					promoDiv.appendChild(promoItem);
+				});
+
+				const usunPromo = document.createElement("div");
+				usunPromo.innerHTML = `<button class="btn-danger" style="margin-top: 10px; padding: 5px 10px;" onclick="anulujPromocjeLojalnosciowa()">Anuluj Promocję</button>`;
+				promoDiv.appendChild(usunPromo);
+			}
+
+			function wybierzPromocjeLojalnosciowa(index) {
+				const promo = promocjeLojalnosciowe[index];
+				if (
+					!aktywnyKlientLojalnosciowy ||
+					aktywnyKlientLojalnosciowy.punkty < promo.wymaganePunkty
+				) {
+					return alert("Klient ma za mało punktów na tę promocję!");
+				}
+
+				aktywnaPromocjaLojalnosciowa = promo;
+				zamowienie = zamowienie.filter(
+					(item) => !item.promocjaLojalnosciowa
+				);
+
+				if (promo.akcja === "item_free") {
+					const produktyDoDodania = promo.produkty
+						.map((prodName) => {
+							const produkt = menu.find(
+								(m) => m.nazwa === prodName
+							);
+							return produkt
+								? {
+										nazwa: produkt.nazwa,
+										cena: 0,
+										ilosc: 1,
+										promocjaLojalnosciowa: true,
+										czyLojalnosc: true,
+								  }
+								: null;
+						})
+						.filter(Boolean);
+
+					zamowienie.push(...produktyDoDodania);
+				} else if (promo.akcja === "discount") {
+					// Rabat jest doliczany jako pozycja zerowa lub inny rabat
+					const rabatItem = {
+						nazwa: `Rabat Lojalnościowy: ${promo.nazwa}`,
+						cena: -promo.wartosc, // Rabat jest ujemny
+						ilosc: 1,
+						promocjaLojalnosciowa: true,
+						czyLojalnosc: true,
+					};
+					zamowienie.push(rabatItem);
+				}
+
+				// Upewnij się, że pole punktów jest wyzerowane
+				document.getElementById("pointsToUse").value = 0;
+
+				aktualizujListeZamowienia();
+				aktualizujWyswietlaniePunktow();
+			}
+
+			function anulujPromocjeLojalnosciowa() {
+				if (!aktywnaPromocjaLojalnosciowa) return;
+
+				zamowienie = zamowienie.filter(
+					(item) => !item.promocjaLojalnosciowa
+				);
+				aktywnaPromocjaLojalnosciowa = null;
+
+				const radioButtons = document.getElementsByName("loyaltyPromo");
+				radioButtons.forEach((radio) => (radio.checked = false));
+
+				aktualizujListeZamowienia();
+				aktualizujWyswietlaniePunktow();
+			}
+
+			function renderujKlientowLojalnosciowych() {
+				const lista = document.getElementById("loyaltyClientsList");
+				lista.innerHTML = "";
+
+				klienciLojalnosciowi.sort((a, b) => b.punkty - a.punkty);
+
+				if (klienciLojalnosciowi.length === 0) {
+					lista.innerHTML =
+						"<li>Brak zarejestrowanych klientów lojalnościowych.</li>";
+					return;
+				}
+
+				klienciLojalnosciowi.forEach((klient, i) => {
+					const li = document.createElement("li");
+					const statusText = klient.aktywny
+						? "Aktywny"
+						: `Nieaktywny (Wymaga aktywacji ${CENA_AKTYWACJI_LOJALNOSCI.toFixed(
+								2
+						  )} ${WALUTA})`;
+					const statusColor = klient.aktywny
+						? "var(--green)"
+						: "var(--red)";
+
+					li.className = "client-item";
+					li.innerHTML = `
+				<div class="client-item-content">
+					<strong>${klient.nazwa}</strong>
+					<small>Punkty: **${klient.punkty}** | Status: <span style="color: ${statusColor}; font-weight: bold;">${statusText}</span></small>
+				</div>
+				<div class="client-actions">
+					${!klient.aktywny ? `<button class="btn-primary" style="background:var(--green); margin-right:6px; padding:6px 10px;" onclick="aktywujKlienta(${i})">Aktywuj teraz</button>` : ''}
+					<button class="btn-danger" onclick="usunKlientaLojalnosciowego(${i})">Usuń</button>
+				</div>
+			`;
+					lista.appendChild(li);
+				});
+			}
+
+			function aktualizujListeKlientowDatalist() {
+				const datalist = document.getElementById(
+					"loyalClientsDataList"
+				);
+				datalist.innerHTML = "";
+
+				klienciLojalnosciowi.forEach((c) => {
+					const option = document.createElement("option");
+					option.value = c.nazwa;
+					datalist.appendChild(option);
+				});
+			}
+
+			function usunKlientaLojalnosciowego(index) {
+				const name = klienciLojalnosciowi[index].nazwa;
+				if (
+					confirm(
+						`Czy na pewno usunąć klienta lojalnościowego "${name}"? Straci on wszystkie punkty!`
+					)
+				) {
+					klienciLojalnosciowi.splice(index, 1);
+					zapiszWszystko();
+					renderujKlientowLojalnosciowych();
+					aktualizujListeKlientowDatalist();
+
+					if (
+						aktywnyKlientLojalnosciowy &&
+						aktywnyKlientLojalnosciowy.nazwa === name
+					) {
+						wyczyscZamowienie();
+					}
+				}
+			}
+
+			function wypelnijProduktyDlaPromocji() {
+				const select = document.getElementById("promoProducts");
+				select.innerHTML = "";
+
+				// Dodaj wszystkie produkty z menu
+				menu.sort((a, b) => a.nazwa.localeCompare(b.nazwa)).forEach(
+					(item) => {
+						const option = document.createElement("option");
+						option.value = item.nazwa;
+						option.textContent = `${
+							item.nazwa
+						} (${item.cena.toFixed(2)} ${WALUTA})`;
+						select.appendChild(option);
+					}
+				);
+			}
+
+			function setupPromoListeners() {
+				const selectAction = document.getElementById("promoAction");
+				const valueWrapper =
+					document.getElementById("promoValueWrapper");
+				const productsWrapper = document.getElementById(
+					"promoProductsWrapper"
+				);
+
+				selectAction.addEventListener("change", () => {
+					if (selectAction.value === "discount") {
+						valueWrapper.style.display = "block";
+						productsWrapper.style.display = "none";
+					} else if (selectAction.value === "item_free") {
+						valueWrapper.style.display = "none";
+						productsWrapper.style.display = "block";
+					}
+				});
+
+				// Ustawienie początkowe
+				selectAction.dispatchEvent(new Event("change"));
+			}
+
+			function dodajPromocjeLojalnosciowa() {
+				const nazwa = document.getElementById("promoName").value.trim();
+				const punkty = parseInt(
+					document.getElementById("promoPoints").value
+				);
+				const akcja = document.getElementById("promoAction").value;
+
+				if (!nazwa) return alert("Podaj nazwę promocji.");
+				if (isNaN(punkty) || punkty <= 0)
+					return alert("Podaj poprawną wymaganą ilość punktów.");
+
+				let nowaPromocja = {
+					nazwa: nazwa,
+					wymaganaPunkty: punkty,
+					akcja: akcja,
+				};
+
+				if (akcja === "discount") {
+					const wartosc = parseFloat(
+						document.getElementById("promoValue").value
+					);
+					if (isNaN(wartosc) || wartosc <= 0)
+						return alert(
+							"Podaj poprawną wartość rabatu kwotowego."
+						);
+					nowaPromocja.wartosc = wartosc;
+				} else if (akcja === "item_free") {
+					const select = document.getElementById("promoProducts");
+					const produkty = Array.from(select.selectedOptions).map(
+						(option) => option.value
+					);
+					if (produkty.length === 0)
+						return alert(
+							"Wybierz przynajmniej jeden produkt objęty promocją."
+						);
+					nowaPromocja.produkty = produkty;
+				}
+
+				if (promocjeLojalnosciowe.some((p) => p.nazwa === nazwa))
+					return alert("Promocja o tej nazwie już istnieje.");
+
+				promocjeLojalnosciowe.push(nowaPromocja);
+				zapiszWszystko();
+				renderujPromocjeLojalnosciowe();
+
+				document.getElementById("promoName").value = "";
+				document.getElementById("promoPoints").value = 1000;
+				document.getElementById("promoValue").value = 5.0;
+				document.getElementById("promoProducts").selectedIndex = -1;
+
+				alert(`Promocja "${nazwa}" dodana pomyślnie.`);
+			}
+
+			function renderujPromocjeLojalnosciowe() {
+				const lista = document.getElementById("loyaltyPromotionsList");
+				lista.innerHTML = "";
+
+				if (promocjeLojalnosciowe.length === 0) {
+					lista.innerHTML =
+						"<li>Brak zdefiniowanych promocji lojalnościowych.</li>";
+					return;
+				}
+
+				promocjeLojalnosciowe.forEach((promo, i) => {
+					const li = document.createElement("li");
+
+					let details = "";
+					if (promo.akcja === "discount") {
+						details = `Rabat Kwotowy: **${promo.wartosc.toFixed(
+							2
+						)} ${WALUTA}**`;
+					} else if (promo.akcja === "item_free") {
+						details = `Darmowe Produkty: ${promo.produkty.join(
+							", "
+						)}`;
+						details = `<div class="loyalty-promo-products">${details}</div>`;
+					}
+
+					li.className = "client-item";
+					li.style.alignItems = "stretch";
+					li.innerHTML = `
+            <div class="client-item-content" style="flex-grow: 1;">
+                <strong>${promo.nazwa}</strong>
+                <small>Wymagana punkty: **${promo.wymaganaPunkty}**</small>
+                ${details}
+            </div>
+            <div class="client-actions" style="margin-top: 5px;">
+                <button class="btn-danger" onclick="usunPromocjeLojalnosciowa(${i})">Usuń</button>
+            </div>
+        `;
+					lista.appendChild(li);
+				});
+			}
+
+			function usunPromocjeLojalnosciowa(index) {
+				const name = promocjeLojalnosciowe[index].nazwa;
+				if (
+					confirm(
+						`Czy na pewno usunąć promocję lojalnościową "${name}"?`
+					)
+				) {
+					promocjeLojalnosciowe.splice(index, 1);
+					zapiszWszystko();
+					renderujPromocjeLojalnosciowe();
+
+					if (
+						aktywnaPromocjaLojalnosciowa &&
+						aktywnaPromocjaLojalnosciowa.nazwa === name
+					) {
+						anulujPromocjeLojalnosciowa();
+					}
+				}
+			}
+
+			// --- POZOSTAŁE FUNKCJE ---
+
+			function generujParagonDlaBiezacegoZamowienia() {
+				if (zamowienie.length === 0)
+					return alert(
+						"Zamówienie jest puste. Nie można wygenerować paragonu."
+					);
+
+				const sumaPodstawowa = pobierzSumePodstawowa();
+				const calkowitaIlosc = zamowienie
+					.filter((item) => !item.jestOpłataAktywacyjna)
+					.reduce((s, i) => s + i.ilosc, 0);
+				const typ = document.getElementById("orderType").value;
+
+				let sumaDoRabatowania =
+					sumaPodstawowa +
+					(typ === "na wynos" || typ === "dostawa"
+						? calkowitaIlosc * OPLATA_OPAKOWANIE
+						: 0) +
+					(typ === "dostawa" ? OPLATA_DOSTAWA : 0);
+
+				// RABAT LOJALNOŚCIOWY (punkty)
+				const punktyDoUzycia =
+					parseInt(document.getElementById("pointsToUse").value) || 0;
+				let rabatLojalnosciowy = 0;
+				let punktyZuzyte = 0;
+				if (aktywnyKlientLojalnosciowy && punktyDoUzycia > 0) {
+					const maxPunkty = aktywnyKlientLojalnosciowy.punkty || 0;
+					punktyZuzyte = Math.min(punktyDoUzycia, maxPunkty);
+					rabatLojalnosciowy = punktyZuzyte * PUNKT_WARTOSC;
+
+					rabatLojalnosciowy = Math.min(
+						rabatLojalnosciowy,
+						sumaDoRabatowania
+					);
+					sumaDoRabatowania -= rabatLojalnosciowy;
+					punktyZuzyte = Math.floor(
+						rabatLojalnosciowy / PUNKT_WARTOSC
+					);
+				}
+
+				// RABAT KODU
+				let rabatKod = 0;
+				const kodRabatowy =
+					document.getElementById("appliedCode").value || null;
+				const obiektKodu = kody.find(
+					(c) => c.kod === kodRabatowy && c.status === "aktywny"
+				);
+
+				if (obiektKodu) {
+					if (obiektKodu.typ === "%") {
+						rabatKod =
+							sumaDoRabatowania * (obiektKodu.wartosc / 100);
+					} else {
+						if (obiektKodu.mode === "per_use") {
+							rabatKod = Math.min(
+								obiektKodu.wartosc,
+								sumaDoRabatowania
+							);
+						} else {
+							const pozostala =
+								obiektKodu.pozostala ?? obiektKodu.wartosc;
+							rabatKod = Math.min(pozostala, sumaDoRabatowania);
+						}
+					}
+				}
+
+				let cenaCalkowita = sumaDoRabatowania - rabatKod;
+				if (cenaCalkowita < 0) cenaCalkowita = 0;
+
+				const tempOrder = {
+					id: Date.now(),
+					data: new Date().toISOString(),
+					pracownik:
+						document.getElementById("orderPerson").value ||
+						"Nieznany",
+					klient:
+						document.getElementById("orderClient").value ||
+						"Anonim",
+					typ: typ,
+					przedmioty: [...zamowienie],
+					sumaPodstawowa: sumaPodstawowa,
+					oplataOpakowanie:
+						typ === "na wynos" || typ === "dostawa"
+							? calkowitaIlosc * OPLATA_OPAKOWANIE
+							: 0,
+					oplataDostawa: typ === "dostawa" ? OPLATA_DOSTAWA : 0,
+					kodRabatowy: kodRabatowy,
+					rabatKod: rabatKod,
+					rabatLojalnosc: rabatLojalnosciowy,
+					promocjaLojalnosc: aktywnaPromocjaLojalnosciowa
+						? aktywnaPromocjaLojalnosciowa.nazwa
+						: null,
+					cenaCalkowita: cenaCalkowita,
+				};
+
+				generujParagonHTML(tempOrder);
+			}
+
+			function generujParagonZHistorii(index) {
+				const order = historiaZamowien[index];
+				generujParagonHTML(order);
+			}
+
+			function generujParagonHTML(order) {
+				const receiptContainer =
+					document.getElementById("receiptContainer");
+				const totalDiscount =
+					(order.rabatKod || 0) + (order.rabatLojalnosc || 0);
+
+				let itemsHTML = order.przedmioty
+					.map((item) => {
+						let nazwa = item.nazwa;
+						if (item.promocjaLojalnosciowa)
+							nazwa = `[PROMOCJA] ${nazwa}`;
+						if (item.jestOpłataAktywacyjna)
+							nazwa = `[AKTYWACJA] ${nazwa}`;
+
+						return `<div class="receipt-item-row">
+            <span>${nazwa} x ${item.ilosc}</span>
+            <span>${(item.cena * item.ilosc).toFixed(2)} ${WALUTA}</span>
+        </div>`;
+					})
+					.join("");
+
+				if (order.oplataOpakowanie > 0) {
+					itemsHTML += `<div class="receipt-item-row"><span>Opakowanie:</span><span>${order.oplataOpakowanie.toFixed(
+						2
+					)} ${WALUTA}</span></div>`;
+				}
+				if (order.oplataDostawa > 0) {
+					itemsHTML += `<div class="receipt-item-row"><span>Dostawa:</span><span>${order.oplataDostawa.toFixed(
+						2
+					)} ${WALUTA}</span></div>`;
+				}
+
+				receiptContainer.innerHTML = `
+        <div id="receiptPreview" class="receipt-content">
+            <div class="receipt-center" style="font-size: 1.2em;">KFC/THREE GUYS</div>
+            <div class="receipt-center">Twoja ulubiona burgerownia</div>
+            <div class="receipt-center">PARAGON FISKALNY</div>
+            <div class="receipt-line"></div>
+            
+            <div class="receipt-item-row"><span>Zamówienie #:</span><span>${
+				order.id
+			}</span></div>
+            <div class="receipt-item-row"><span>Data:</span><span>${new Date(
+				order.data
+			).toLocaleString()}</span></div>
+            <div class="receipt-item-row"><span>Przyjął:</span><span>${
+				order.pracownik
+			}</span></div>
+            <div class="receipt-item-row"><span>Klient:</span><span>${
+				order.klient
+			}</span></div>
+            <div class="receipt-line"></div>
+
+            ${itemsHTML}
+            
+            <div class="receipt-line"></div>
+            
+            ${
+				totalDiscount > 0
+					? `
+                <div class="receipt-item-row" style="color: ${
+					totalDiscount > 0 ? "green" : "black"
+				};">
+                    <span>RABAT CAŁKOWITY:</span>
+                    <span>-${totalDiscount.toFixed(2)} ${WALUTA}</span>
+                </div>
+                ${
+					order.rabatLojalnosciowy > 0
+						? `<div class="receipt-item-row" style="color: green; font-size: 0.9em;"><span>(Rabat Lojalność):</span><span>-${order.rabatLojalnosciowy.toFixed(
+								2
+						  )} ${WALUTA}</span></div>`
+						: ""
+				}
+                ${
+					order.rabatKod > 0
+						? `<div class="receipt-item-row" style="color: green; font-size: 0.9em;"><span>(Rabat Kod ${
+								order.kodRabatowy
+						  }):</span><span>-${order.rabatKod.toFixed(
+								2
+						  )} ${WALUTA}</span></div>`
+						: ""
+				}
+                <div class="receipt-line"></div>
+            `
+					: ""
+			}
+
+            <div class="receipt-total-row receipt-item-row">
+                <span>SUMA:</span>
+                <span>${order.cenaCalkowita.toFixed(2)} ${WALUTA}</span>
+            </div>
+            
+            ${
+				order.punktyNaliczone > 0
+					? `<div class="receipt-center" style="margin-top: 5px; font-weight: bold;">Naliczone punkty: +${order.punktyNaliczone}</div>`
+					: ""
+			}
+            ${
+				order.promocjaLojalnosc
+					? `<div class="receipt-center" style="margin-top: 5px; font-weight: bold; color: var(--green);">Użyto promocji: ${order.promocjaLojalnosc}</div>`
+					: ""
+			}
+            
+            <div class="receipt-line"></div>
+            <div class="receipt-center" style="margin-top: 10px;">Dziękujemy za zakupy w KFC/THREE GUYS!</div>
+        </div>
+    `;
+
+				const { jsPDF } = window.jspdf;
+				const doc = new jsPDF({
+					unit: "mm",
+					format: [80, 297],
+				});
+
+				html2canvas(document.getElementById("receiptPreview"), {
+					scale: 2,
+					useCORS: true,
+				}).then((canvas) => {
+					const imgData = canvas.toDataURL("image/jpeg", 1.0);
+					const imgProps = doc.getImageProperties(imgData);
+
+					const pdfWidth = 78;
+					const pdfHeight =
+						(imgProps.height * pdfWidth) / imgProps.width;
+
+					doc.addImage(imgData, "JPEG", 1, 1, pdfWidth, pdfHeight);
+					doc.save(`Paragon_${order.id}.pdf`);
+					receiptContainer.innerHTML = "";
+				});
+			}
+
+			function wyczyscCalaHistorie() {
+				if (
+					!confirm(
+						"Czy na pewno chcesz usunąć całą historię zamówień? Tej operacji nie można cofnąć! (Usunie to także dane klientów lojalnościowych, ponieważ ich punkty są z tym powiązane)"
+					)
+				)
+					return;
+				historiaZamowien = [];
+				klienciLojalnosciowi = []; // Resetowanie klientów lojalnościowych, bo ich punkty są związane z historią
+				zapiszWszystko();
+				renderujHistorieZamowien();
+				renderujKlientowLojalnosciowych();
+				aktualizujListeKlientowDatalist();
+				// Usunięto generujStatystyki();
+				alert("Historia i klienci lojalnościowi usunięci.");
+			}
+
+			function renderujHistorieZamowien() {
+				const lista = document.getElementById("orderHistory");
+				lista.innerHTML = "";
+
+				historiaZamowien.sort((a, b) => b.id - a.id);
+
+				// Obliczanie zarobków od ostatniego piątku
+				const dzisiaj = new Date();
+				const dzienTygodnia = dzisiaj.getDay(); // 0 = niedziela, 5 = piątek
+				let ostatniPiatek = new Date(dzisiaj);
+
+				// Oblicz ile dni wstecz do piątku (jeśli dzisiaj nie jest piątek)
+				const dniDoWstecz = (dzienTygodnia + 2) % 7 || 7;
+				ostatniPiatek.setDate(dzisiaj.getDate() - dniDoWstecz);
+				ostatniPiatek.setHours(0, 0, 0, 0);
+
+				const zarobkiOdPiatku = historiaZamowien
+					.filter((z) => new Date(z.data) >= ostatniPiatek)
+					.reduce((suma, z) => suma + z.cenaCalkowita, 0);
+
+				// Obliczanie opłat do zapłaty i zysku
+				const zamowieniaOdPiatku = historiaZamowien.filter((z) => new Date(z.data) >= ostatniPiatek);
+				let doZaplaty = 0;
+				
+				zamowieniaOdPiatku.forEach((zamowienie) => {
+					zamowienie.przedmioty.forEach((item) => {
+						const produkt = menu.find((p) => p.nazwa === item.nazwa);
+						if (produkt) {
+							if (produkt.kategoria === "Napoje") {
+								doZaplaty += 3 * item.ilosc;
+							} else if (produkt.kategoria === "Dodatki" || produkt.kategoria === "Frytki") {
+								doZaplaty += 5 * item.ilosc;
+							} else if (produkt.kategoria === "Mięso" || produkt.kategoria === "Burgery/Wrapy") {
+								doZaplaty += 10 * item.ilosc;
+							}
+						}
+					});
+				});
+				
+				const zysk = zarobkiOdPiatku - doZaplaty;
+
+				// Nagłówek z zarobkami
+				const headerDiv = document.createElement("div");
+				headerDiv.style.marginBottom = "20px";
+				headerDiv.style.padding = "15px";
+				headerDiv.style.background = "#e6ffe6";
+				headerDiv.style.border = "2px solid var(--green)";
+				headerDiv.style.borderRadius = "8px";
+				headerDiv.innerHTML = `
+					<h3 style="margin: 0 0 10px 0; color: var(--green);">Zarobki od ostatniego piątku</h3>
+					<strong style="font-size: 1.2em; color: var(--green);">${zarobkiOdPiatku.toFixed(
+						2
+					)} ${WALUTA}</strong>
+					<div style="font-size: 0.9em; color: #666; margin-top: 5px;">
+						Od: ${ostatniPiatek.toLocaleDateString("pl-PL")}
+					</div>
+					<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #4CAF50;">
+						<div style="font-size: 0.9em; color: #333; margin-bottom: 5px;">
+							<strong>Do zapłaty:</strong> ${doZaplaty.toFixed(2)} ${WALUTA}
+							<span style="font-size: 0.8em; color: #666;">(3 USD/napój, 5 USD/dodatek+frytki, 10 USD/mięso+burger)</span>
+						</div>
+						<div style="font-size: 1em; color: ${zysk >= 0 ? '#155724' : '#842029'}; font-weight: bold;">
+							<strong>Wyjdę na plus:</strong> ${zysk.toFixed(2)} ${WALUTA}
+						</div>
+					</div>
+				`;
+				lista.appendChild(headerDiv);
+
+				historiaZamowien.forEach((z, i) => {
+					const li = document.createElement("li");
+					li.className = "codes-list";
+					const data = new Date(z.data).toLocaleString();
+
+					// Sformatowanie listy pozycji zamówienia
+					let pozycjeHTML =
+						'<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 0.9em;">';
+					pozycjeHTML +=
+						'<strong>Zamówione produkty:</strong><ul style="margin: 5px 0; padding-left: 20px;">';
+
+					z.przedmioty.forEach((item) => {
+						let nazwa = item.nazwa;
+						if (item.promocjaLojalnosciowa) {
+							nazwa = `<span style="color: var(--green);">[GRATIS] ${nazwa}</span>`;
+						} else if (item.jestOpłataAktywacyjna) {
+							nazwa = `<span style="color: #666;">[AKTYWACJA] ${nazwa}</span>`;
+						}
+						pozycjeHTML += `<li style="margin: 3px 0;">${nazwa} x${
+							item.ilosc
+						} — ${(item.cena * item.ilosc).toFixed(
+							2
+						)} ${WALUTA}</li>`;
+					});
+
+					pozycjeHTML += "</ul></div>";
+
+					let rabatInfo = "";
+					if (z.rabatKod > 0)
+						rabatInfo += `Kod: -${z.rabatKod.toFixed(
+							2
+						)} ${WALUTA}. `;
+					if (z.rabatLojalnosc > 0)
+						rabatInfo += `Punkty: -${z.rabatLojalnosciowy.toFixed(
+							2
+						)} ${WALUTA}. `;
+					if (z.promocjaLojalnosc)
+						rabatInfo += `Promocja: ${z.promocjaLojalnosc}. `;
+
+					let punktyInfo = "";
+					if (z.punktyNaliczone > 0 || z.punktyZuzyte > 0) {
+						punktyInfo = `| Punkty: +${
+							z.punktyNaliczone || 0
+						} (użyto: ${z.punktyZuzyte || 0})`;
+					}
+
+					if (rabatInfo)
+						rabatInfo = `<br><span style="color: ${
+							z.cenaCalkowita < 0 ? "red" : "green"
+						}; font-weight: bold;">Rabat: ${rabatInfo}</span>`;
+
+					li.innerHTML = `
+			<div style="display: flex; justify-content: space-between; align-items: center;">
+				<div style="flex-grow: 1;">
+					<strong>Zamówienie #${z.id}</strong> (${data})
+				</div>
+				<div>
+					<button onclick="generujParagonZHistorii(${i})" class="btn-primary" style="background:#4CAF50; margin-right: 8px; padding: 4px 8px;">Paragon</button>
+					<button onclick="kopiujZHistorii(${i})" class="btn-primary" style="background:#6c757d; margin-right: 8px; padding: 4px 8px;">Kopiuj</button>
+					<button onclick="usunZamowienie(${i})" class="delete-order-btn">Usuń</button>
+				</div>
+			</div>
+			<div class="meta">
+				Pracownik: ${z.pracownik} | Klient: ${
+						z.klient || "Anonim"
+					} | Typ: ${z.typ} ${punktyInfo}
+				<br>
+				Łącznie: <strong>${z.cenaCalkowita.toFixed(
+						2
+					)} ${WALUTA}</strong> (podstawa: ${z.sumaPodstawowa.toFixed(
+						2
+					)} ${WALUTA})
+				${rabatInfo}
+			</div>
+			${pozycjeHTML}
+		`;
+					lista.appendChild(li);
+				});
+			}
+
+			function usunZamowienie(index) {
+				if (
+					confirm(
+						`Czy na pewno usunąć zamówienie #${historiaZamowien[index].id}? Zostanie to odliczone z punktów klienta.`
+					)
+				) {
+					// Logika przywracania punktów, jeśli istniały
+					const usunięteZamowienie = historiaZamowien[index];
+					const klient = klienciLojalnosciowi.find(
+						(c) => c.nazwa === usunięteZamowienie.klient
+					);
+
+					if (klient) {
+						// Odebranie naliczonych punktów
+						klient.punkty =
+							(klient.punkty || 0) -
+							(usunięteZamowienie.punktyNaliczone || 0);
+
+						// Przywrócenie zużytych punktów z rabatu
+						klient.punkty =
+							(klient.punkty || 0) +
+							(usunięteZamowienie.punktyZuzyte || 0);
+
+						// Przywrócenie punktów z promocji
+						const promo = promocjeLojalnosciowe.find(
+							(p) =>
+								p.nazwa === usunięteZamowienie.promocjaLojalnosc
+						);
+						if (promo) {
+							klient.punkty =
+								(klient.punkty || 0) + promo.wymaganePunkty;
+						}
+
+						// Jeśli zamówienie zawierało opłatę aktywacyjną, to klient wraca na "nieaktywny"
+						if (
+							usunięteZamowienie.przedmioty.some(
+								(p) => p.jestOpłataAktywacyjna
+							)
+						) {
+							klient.aktywny = false;
+						}
+
+						// Upewnij się, że punkty nie są ujemne
+						if (klient.punkty < 0) klient.punkty = 0;
+					}
+
+					historiaZamowien.splice(index, 1);
+					zapiszWszystko();
+					renderujHistorieZamowien();
+					// Usunięto generujStatystyki();
+					renderujKlientowLojalnosciowych();
+				}
+			}
+
+			function dodajPracownika(rola) {
+				const imieInput = document.getElementById("newStaffName");
+				const imie = imieInput.value.trim();
+
+				if (!imie) return alert("Podaj imię nowej osoby.");
+
+				if (
+					personel.employees.some((p) => p.imie === imie) ||
+					(personel.boss && personel.boss.imie === imie)
+				) {
+					return alert("Taka osoba już istnieje.");
+				}
+
+				if (rola === "szef") {
+					if (personel.boss) {
+						personel.employees.push(personel.boss);
+					}
+					personel.boss = { imie: imie };
+				} else {
+					personel.employees.push({ imie: imie });
+				}
+
+				imieInput.value = "";
+				zapiszWszystko();
+				renderujPersonel();
+				aktualizujListeOsob();
+			}
+
+			function renderujPersonel() {
+				const bossSection = document.getElementById("bossSection");
+				const employeeSection =
+					document.getElementById("employeeSection");
+
+				bossSection.innerHTML = "";
+				employeeSection.innerHTML = "";
+
+				if (personel.boss) {
+					bossSection.innerHTML = `
+            <h3>Szef kuchni / Właściciel</h3>
+            <div class="client-item" style="border-left: 5px solid #dc3545;">
+                <div class="client-item-content">
+                    <strong>${personel.boss.imie}</strong>
+                </div>
+                <div class="client-actions">
+                    <button class="btn-danger" onclick="usunPracownika('boss')">Usuń</button>
+                </div>
+            </div>
+        `;
+				} else {
+					bossSection.innerHTML =
+						'<h3>Brak Szefa</h3><p>Użyj przycisku "Mianuj Szefem" powyżej, aby dodać Szefa.</p>';
+				}
+
+				employeeSection.innerHTML = `
+        <h3>Pracownicy (${personel.employees.length})</h3>
+        <ul id="employeesList" class="codes-list">
+        ${personel.employees
+			.sort((a, b) => a.imie.localeCompare(b.imie))
+			.map(
+				(p, i) => `
+            <li class="client-item">
+                <div class="client-item-content">
+                    <strong>${p.imie}</strong>
+                </div>
+                <div class="client-actions">
+                    <button class="btn-primary" onclick="mianujSzefem(${i})">Mianuj Szefem</button>
+                    <button class="btn-danger" onclick="usunPracownika(${i})">Usuń</button>
+                </div>
+            </li>
+        `
+			)
+			.join("")}
+        </ul>
+    `;
+			}
+
+			function usunPracownika(indexOrRole) {
+				if (indexOrRole === "boss") {
+					if (
+						confirm(
+							`Czy na pewno chcesz usunąć Szefa ${personel.boss.imie}?`
+						)
+					) {
+						personel.boss = null;
+					}
+				} else {
+					if (
+						confirm(
+							`Czy na pewno chcesz usunąć pracownika ${personel.employees[indexOrRole].imie}?`
+						)
+					) {
+						personel.employees.splice(indexOrRole, 1);
+					}
+				}
+				zapiszWszystko();
+				renderujPersonel();
+				aktualizujListeOsob();
+			}
+
+			function mianujSzefem(index) {
+				const nowaLista = [...personel.employees];
+				const nowySzef = nowaLista.splice(index, 1)[0];
+
+				if (personel.boss) {
+					nowaLista.push(personel.boss);
+				}
+
+				personel.employees = nowaLista;
+				personel.boss = nowySzef;
+				zapiszWszystko();
+				renderujPersonel();
+				aktualizujListeOsob();
+			}
+
+			function aktualizujListeOsob() {
+				const select = document.getElementById("orderPerson");
+				const obecnaWartosc = select.value;
+				select.innerHTML =
+					'<option value="">-- Wybierz Pracownika --</option>';
+
+				let opcje = [];
+				if (personel.boss) {
+					opcje.push({
+						value: personel.boss.imie,
+						text: personel.boss.imie + " (Szef)",
+					});
+				}
+
+				personel.employees.sort((a, b) => a.imie.localeCompare(b.imie));
+
+				personel.employees.forEach((p) => {
+					opcje.push({ value: p.imie, text: p.imie });
+				});
+
+				opcje.forEach((opt) => {
+					const option = document.createElement("option");
+					option.value = opt.value;
+					option.textContent = opt.text;
+					select.appendChild(option);
+				});
+				select.value = obecnaWartosc;
+			}
+
+			function generujKod() {
+				const wartosc = parseFloat(
+					document.getElementById("newCodeValue").value
+				);
+				const typ = document.getElementById("newCodeType").value;
+				const maxUse = parseInt(
+					document.getElementById("newCodeMaxUse").value
+				);
+				const mode =
+					document.getElementById("newCodeMode")?.value || "one_time";
+				let kod = document
+					.getElementById("customCodeName")
+					.value.trim()
+					.toUpperCase();
+
+				if (isNaN(wartosc) || wartosc <= 0)
+					return alert("Wprowadź poprawną wartość rabatu.");
+				if (typ === "%" && wartosc > 100)
+					return alert(
+						"Rabat procentowy nie może być większy niż 100%."
+					);
+
+				if (!kod) {
+					const part1 = Math.random()
+						.toString(36)
+						.substring(2, 6)
+						.toUpperCase();
+					const part2 = Math.random()
+						.toString(36)
+						.substring(2, 6)
+						.toUpperCase();
+					kod = `${part1}-${part2}`;
+				}
+				if (kody.some((c) => c.kod === kod))
+					return alert("Taki kod już istnieje. Zmień jego nazwę.");
+
+				const nowyKod = {
+					kod: kod,
+					typ: typ,
+					wartosc: wartosc,
+					status: "aktywny",
+					maxUse: maxUse > 0 ? maxUse : undefined,
+					usedCount: 0,
+					mode: mode, // "one_time" lub "per_use"
+				};
+				// dla trybu jednorazowego z kwotą ustawiamy pozostala (pulę)
+				if (typ === "usd" && mode === "one_time")
+					nowyKod.pozostala = wartosc;
+
+				kody.push(nowyKod);
+				zapiszWszystko();
+				renderujListeKodow();
+				renderujListeKodowDropdown();
+				alert(`Kod rabatowy "${kod}" (${wartosc}${typ}) dodany.`);
+
+				document.getElementById("newCodeValue").value = "";
+				document.getElementById("customCodeName").value = "";
+				document.getElementById("newCodeMaxUse").value = 1;
+				document.getElementById("newCodeMode").value = "one_time";
+			}
+
+			function renderujListeKodow() {
+				const lista = document.getElementById("codesList");
+				lista.innerHTML = "";
+
+				kody.sort((a, b) => a.kod.localeCompare(b.kod));
+
+				kody.forEach((k, i) => {
+					const li = document.createElement("li");
+					let pozostalo = "";
+					if (k.typ === "usd") {
+						// defensywne wartości
+						const val = Number(k.pozostala ?? k.wartosc) || 0;
+						if (k.mode === "per_use") {
+							pozostalo = ` (Stała: ${Number(
+								k.wartosc || 0
+							).toFixed(2)} USD)`;
+						} else {
+							pozostalo = ` (Pozostało: ${val.toFixed(
+								2
+							)} ${WALUTA})`;
+						}
+					}
+					let statusColor = k.status === "aktywny" ? "green" : "red";
+					let useLimit = k.maxUse
+						? ` | Użycia: ${k.usedCount || 0}/${k.maxUse}`
+						: "";
+
+					li.innerHTML = `
+			<div style="display:flex; justify-content:space-between; align-items:center;">
+				<div>
+					<strong>${k.kod}</strong>: ${Number(k.wartosc || 0)}${
+						k.typ === "usd" ? " USD" : "%"
+					}${pozostalo}
+					<div class="meta">
+						Status: <span style="color: ${statusColor}; font-weight: bold;">${
+						k.status
+					}</span> 
+						${useLimit}
+					</div>
+				</div>
+				<button onclick="usunKodRabatowy(${i})" class="btn-danger">Usuń</button>
+			</div>
+		`;
+					lista.appendChild(li);
+				});
+			}
+
+			function renderujListeKodowDropdown() {
+				const select = document.getElementById("appliedCode");
+				const obecnaWartosc = select.value;
+				select.innerHTML =
+					'<option value="">-- wybierz kod --</option>';
+
+				kody.filter((k) => k.status === "aktywny").forEach((k) => {
+					const option = document.createElement("option");
+					option.value = k.kod;
+
+					let info = `${k.wartosc}${k.typ === "usd" ? " USD" : "%"}`;
+					if (k.typ === "usd") {
+						if (k.mode === "per_use")
+							info += ` (użycia: ${k.usedCount || 0}/${
+								k.maxUse || "∞"
+							})`;
+						else if (k.pozostala != k.wartosc)
+							info += ` (Pozostało: ${k.pozostala.toFixed(
+								2
+							)} ${WALUTA})`;
+					} else if (k.maxUse)
+						info += ` (Użycia: ${k.usedCount || 0}/${k.maxUse})`;
+					option.textContent = `${k.kod} (${info})`;
+					select.appendChild(option);
+				});
+				select.value = obecnaWartosc;
+			}
+
+			function usunKodRabatowy(indeks) {
+				if (confirm(`Czy na pewno usunąć kod "${kody[indeks].kod}"?`)) {
+					kody.splice(indeks, 1);
+					zapiszWszystko();
+					renderujListeKodow();
+					renderujListeKodowDropdown();
+					aktualizujListeZamowienia();
+				}
+			}
+
+
+			function generujKartePodarunkowa() {
+				const amount = parseFloat(document.getElementById('giftAmount').value);
+				const buyer = document.getElementById('giftBuyer').value.trim();
+				const giver = document.getElementById('giftGiver').value.trim();
+				const wishes = document.getElementById('giftWishes').value.trim();
+
+				if (isNaN(amount) || amount <= 0) return alert('Wprowadź poprawną kwotę karty.');
+				if (!buyer) return alert('Podaj imię i nazwisko kupującego.');
+				if (!giver) return alert('Podaj imię i nazwisko obdarowującego.');
+
+				// Generuj kod w formacie 4 cyfry - 4 cyfry (np. 1234-5678)
+				function wygenerujKodNum() {
+					const a = Math.floor(1000 + Math.random() * 9000);
+					const b = Math.floor(1000 + Math.random() * 9000);
+					return `${a}-${b}`;
+				}
+
+				let kod = wygenerujKodNum();
+				let guard = 0;
+				while (kody.some(c => c.kod === kod) && guard < 50) { kod = wygenerujKodNum(); guard++; }
+				if (guard >= 50) return alert('Błąd generowania unikalnego kodu, spróbuj ponownie.');
+
+				const nowyGift = {
+					kod: kod,
+					typ: 'usd',
+					wartosc: amount,
+					status: 'aktywny',
+					mode: 'one_time',
+					pozostala: amount
+				};
+
+				kody.push(nowyGift);
+
+				// Dodaj zakup karty do bieżącego zamówienia
+				zamowienie.push({ nazwa: `Karta podarunkowa (${kod})`, cena: amount, ilosc: 1, isGiftCard: true });
+
+				zapiszWszystko();
+				renderujListeKodow();
+				renderujListeKodowDropdown();
+				aktualizujListeZamowienia();
+
+				generujPDFKarty(nowyGift, buyer, giver, wishes);
+
+				alert(`Karta podarunkowa ${kod} utworzona i dodana do zamówienia.`);
+
+				// Czyść formularz
+				document.getElementById('giftAmount').value = '';
+				document.getElementById('giftBuyer').value = '';
+				document.getElementById('giftGiver').value = '';
+				document.getElementById('giftWishes').value = '';
+			}
+
+
+			function generujPDFKarty(gift, buyer, giver, wishes) {
+				const { jsPDF } = window.jspdf;
+
+				// Utwórz tymczasowy element HTML, który będzie renderowany przez html2canvas.
+				const wrapper = document.createElement('div');
+				wrapper.style.position = 'fixed';
+				wrapper.style.left = '-9999px';
+				wrapper.style.top = '0';
+				wrapper.style.padding = '0';
+				wrapper.style.background = 'transparent';
+				wrapper.id = 'tmp-gift-card';
+
+				const card = document.createElement('div');
+				card.style.width = '1000px';
+				card.style.height = '700px';
+				card.style.boxSizing = 'border-box';
+				card.style.padding = '36px';
+				card.style.background = '#fff';
+				card.style.border = '6px solid #c51b1b';
+				card.style.borderRadius = '16px';
+				card.style.display = 'flex';
+				card.style.flexDirection = 'column';
+				card.style.justifyContent = 'space-between';
+				card.style.fontFamily = "'Segoe UI', Roboto, Arial, sans-serif";
+				card.style.color = '#111';
+
+				// Header
+				const h = document.createElement('div');
+				h.style.textAlign = 'center';
+				h.innerHTML = `<div style="font-weight:700; color:#c51b1b; font-size:34px;">KFC / THREE GUYS</div>
+							   <div style="font-size:18px; color:#333; margin-top:6px;">Karta podarunkowa</div>`;
+				card.appendChild(h);
+
+				// Kod i kwota
+				const mid = document.createElement('div');
+				mid.style.textAlign = 'center';
+				mid.style.marginTop = '8px';
+				mid.innerHTML = `<div style="font-weight:800; font-size:74px; letter-spacing:2px;">${gift.kod}</div>
+								 <div style="font-size:28px; margin-top:6px; color:#222;">${gift.wartosc.toFixed(2)} USD</div>`;
+				card.appendChild(mid);
+
+				// Buyer / Giver / Wishes
+				const info = document.createElement('div');
+				info.style.fontSize = '16px';
+				info.style.color = '#333';
+				info.style.display = 'flex';
+				info.style.justifyContent = 'space-between';
+				info.style.alignItems = 'flex-start';
+				info.style.marginTop = '8px';
+
+				const left = document.createElement('div');
+				left.style.flex = '1';
+				left.innerHTML = `<div style="font-weight:700;">Kupujący</div><div>${buyer}</div>`;
+
+				const right = document.createElement('div');
+				right.style.flex = '1';
+				right.style.textAlign = 'right';
+				right.innerHTML = `<div style="font-weight:700;">Obdarowany</div><div>${giver}</div>`;
+
+				info.appendChild(left);
+				info.appendChild(right);
+				card.appendChild(info);
+
+				if (wishes) {
+					const w = document.createElement('div');
+					w.style.marginTop = '12px';
+					w.style.fontStyle = 'italic';
+					w.style.fontSize = '14px';
+					w.textContent = `"${wishes}"`;
+					card.appendChild(w);
+				}
+
+				const foot = document.createElement('div');
+				foot.style.textAlign = 'center';
+				foot.style.fontSize = '12px';
+				foot.style.color = '#666';
+				foot.style.marginTop = '12px';
+				foot.textContent = 'Aby otrzymać rabat, przyjdź do lokalu i podaj powyższy kod.';
+				card.appendChild(foot);
+
+				wrapper.appendChild(card);
+				document.body.appendChild(wrapper);
+
+				// Renderuj html do canvas (zachowa polskie znaki dzięki przeglądarce)
+				html2canvas(card, { scale: 2, useCORS: true }).then(canvas => {
+					const imgData = canvas.toDataURL('image/png');
+
+					// Utwórz PDF w rozmiarze A6 landscape dopasowany do proporcji
+					const imgWidth = 148; // mm A5 szerokość/skalowanie
+					const imgProps = { width: canvas.width, height: canvas.height };
+					const pdf = new jsPDF({ unit: 'mm', format: 'a6' });
+
+					// Calculate height to keep aspect ratio
+					const pdfWidth = pdf.internal.pageSize.getWidth();
+					const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+					pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+					pdf.save(`KartaPodarunkowa_${gift.kod}.pdf`);
+
+					// cleanup
+					document.body.removeChild(wrapper);
+				}).catch(err => {
+					document.body.removeChild(wrapper);
+					alert('Błąd generowania PDF: ' + err);
+				});
+			}
+
+			// Insert new helper to count complete sets (Burger/Wrap + Frytki + Napoje)
+			function policzZestawy() {
+				// liczymy tylko rzeczywiste produkty (pomijamy opłaty/promocje)
+				const items = zamowienie.filter(
+					(it) =>
+						!it.jestOpłataAktywacyjna && !it.promocjaLojalnosciowa
+				);
+				let burgers = 0,
+					frytki = 0,
+					napoje = 0;
+				items.forEach((it) => {
+					const m = menu.find((mm) => mm.nazwa === it.nazwa);
+					if (!m) return; // niestandardowe pozycje pomijamy
+					const qty = Number(it.ilosc) || 0;
+					if (m.kategoria === "Burgery/Wrapy") burgers += qty;
+					else if (m.kategoria === "Frytki") frytki += qty;
+					else if (m.kategoria === "Napoje") napoje += qty;
+				});
+				return Math.max(0, Math.min(burgers, frytki, napoje));
+			}
+
+			// Oblicza rabat za pary takich samych burgerów/wrapów (10 USD za każdą parę)
+			// Pomija burgery przypisane do zestawów (policzonych przez policzZestawy())
+			function policzRabatPar() {
+				const items = zamowienie.filter(
+					(it) => !it.jestOpłataAktywacyjna && !it.promocjaLojalnosciowa
+				);
+				const counts = {};
+				items.forEach((it) => {
+					const m = menu.find((mm) => mm.nazwa === it.nazwa);
+					if (!m) return;
+					if (m.kategoria === "Burgery/Wrapy") {
+						counts[it.nazwa] = (counts[it.nazwa] || 0) + Number(it.ilosc || 0);
+					}
+				});
+
+				let burgersInSets = policzZestawy();
+				if (burgersInSets > 0) {
+					for (const name of Object.keys(counts)) {
+						if (burgersInSets <= 0) break;
+						const take = Math.min(counts[name], burgersInSets);
+						counts[name] -= take;
+						burgersInSets -= take;
+					}
+				}
+
+				let rabat = 0;
+				for (const name in counts) {
+					const pares = Math.floor(counts[name] / 2);
+					if (pares > 0) rabat += pares * 10.0;
+				}
+				return rabat;
+			}
+		</script>
+	</body>
 </html>
